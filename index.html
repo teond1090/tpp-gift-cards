@@ -101,7 +101,7 @@
         <select id="brand">
           <option>Amazon Gift Card</option><option>Visa Gift Card</option><option>American Express Gift Card</option>
           <option>Starbucks Gift Card</option><option>Chick-fil-A Gift Card</option><option>Chipotle Gift Card</option>
-          <option>Domino's Gift Card</option><option>Olive Garden Gift Card</option><option>Panera Gift Card</option>
+          <option>Domino's Gift Card</option><option>Five Guys Gift Card</option><option>Olive Garden Gift Card</option><option>Panera Gift Card</option>
           <option>Subway Gift Card</option>
         </select></div>
       <div><label for="amount">Value ($)</label><input id="amount" type="number" inputmode="decimal" min="1" step="1" placeholder="25"></div>
@@ -143,7 +143,7 @@
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbxIFtva6IDLTqA2IYSAWJYaQz-RvYRuhVq2w3sPz9-hkGot22SonW3y-mH5bS3_QWdF/exec";
   const $ = id => document.getElementById(id);
   const ls = { get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
-  const BRANDS = ["Amazon", "American Express", "Visa", "Starbucks", "Chick-fil-A", "Chipotle", "Domino's", "Olive Garden", "Panera", "Subway"];
+  const BRANDS = ["Amazon", "American Express", "Visa", "Starbucks", "Chick-fil-A", "Chipotle", "Domino's", "Five Guys", "Olive Garden", "Panera", "Subway"];
   const kind = b => /amazon/i.test(b) ? "amazon" : /visa|american express/i.test(b) ? "card" : "store";   // how the card is redeemed
   const shots = { front: null, back: null };          // compressed JPEG data URLs that get uploaded
 
