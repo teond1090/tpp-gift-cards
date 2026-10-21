@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gift Card Scanner</title>
+<title>TPP Gift Card Uploader</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#b3202a">
 <style>
@@ -64,7 +64,7 @@
 <header>
   <div class="row">
     <img src="assets/img/shield.webp" alt="">
-    <div><h1>Gift Card Scanner</h1><p>Snap a physical gift card &rarr; it becomes an e-gift card on the prize wheel.</p></div>
+    <div><h1>Gift Card Uploader</h1><p>Snap a physical gift card &rarr; it becomes an e-gift card on the prize wheel.</p></div>
   </div>
 </header>
 
@@ -138,7 +138,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script>
-  // Same endpoint as the kiosk's prize wheel (tpp-kiosk/index.html PRIZE_ENDPOINT).
+  // Same endpoint as the kiosk's prize wheel (tpp-kiosk/index.html PRIZE_ENDPOINT; staff-only, not linked from the kiosk).
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbxIFtva6IDLTqA2IYSAWJYaQz-RvYRuhVq2w3sPz9-hkGot22SonW3y-mH5bS3_QWdF/exec";
   const $ = id => document.getElementById(id);
   const ls = { get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
