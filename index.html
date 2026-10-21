@@ -114,6 +114,12 @@
 </header>
 
 <main>
+  <section class="panel" id="setup-banner" hidden style="border:3px solid #e2343e">
+    <h2 style="color:#b3202a">One-time setup needed</h2>
+    <p class="hint" style="color:#16161a;font-size:15px">You can snap and read cards now, but <b>adding them to the wheel</b> starts working once the
+      updated prize wheel script is installed in Google Apps Script and you've entered the kiosk key it gives you.</p>
+  </section>
+
   <section class="panel" id="key-panel" hidden>
     <h2>Staff key</h2>
     <p class="hint">Type the kiosk key once. This phone remembers it.</p>
@@ -375,8 +381,9 @@
     $("eg-num").textContent = num ? (k === "amazon" ? num.toUpperCase() : num.replace(/(.{4})(?=.)/g, "$1 ")) : "";
     const okBrand = Object.keys(BRANDS).includes(b), okAmt = +$("amount").value > 0, okNum = /^[0-9A-Za-z-]{6,30}$/.test(num);
     $("f-brand").classList.toggle("missing", !okBrand); $("f-amount").classList.toggle("missing", !okAmt); $("f-number").classList.toggle("missing", !okNum);
-    $("add").disabled = !(okBrand && okAmt && okNum && key());
-    if (!key()) status("Enter the kiosk key at the top to add cards.", "err");
+    $("add").disabled = !(okBrand && okAmt && okNum && key() && scriptReady);
+    if (!scriptReady) status("Can't add yet: the prize wheel script still needs its one-time setup (new script + kiosk key).", "err");
+    else if (!key()) status("Enter the kiosk key at the top to add cards.", "err");
     else if (!okBrand || !okAmt || !okNum) status("Fill in the red " + (okBrand && okAmt ? "field" : "fields") + ", then add it.", "");
     else status("Looks good? Add it.", "ok");
   }
@@ -412,10 +419,14 @@
   }
   $("retake").addEventListener("click", startOver);
 
+  let scriptReady = false;                                               // the updated prize wheel script answers ?stock=1 with JSON
   async function showStock(s) {
     try { if (!s) s = await (await fetch(ENDPOINT + "?stock=1&t=" + Date.now())).json(); } catch (e) { s = null; }
     const el = $("stock");
-    if (!s || typeof s !== "object") { el.innerHTML = "<span>Not available yet: install the updated prize wheel script.</span>"; return; }
+    scriptReady = !!s && typeof s === "object";
+    $("setup-banner").hidden = scriptReady;
+    if ($("result").classList.contains("on")) refresh();
+    if (!scriptReady) { el.innerHTML = "<span>Not available yet: install the updated prize wheel script.</span>"; return; }
     const rows = Object.entries(s);
     el.innerHTML = rows.length ? rows.map(([k, v]) => "<span>" + k.replace(" Gift Card", "") + " <b>" + v + "</b></span>").join("") : "<span>No cards yet</span>";
   }
