@@ -203,6 +203,9 @@
   function showKey() { const has = !!key(); $("key-panel").hidden = has; $("keychip").hidden = !has; }
   $("key-save").addEventListener("click", () => { ls.set("tpp-kiosk-key", $("key").value.trim().toUpperCase()); showKey(); showStock(); });
   $("keychip").addEventListener("click", () => { $("key").value = key(); $("key-panel").hidden = false; });
+  // one-tap setup link: .../tpp-gift-cards/#key=XXXXXXXX saves the key on this phone, then wipes it from the address bar
+  { const m = /^#key=([0-9A-Za-z]{6,12})$/.exec(location.hash);
+    if (m) { ls.set("tpp-kiosk-key", m[1].toUpperCase()); history.replaceState(null, "", location.pathname); setTimeout(() => toast("✓ Kiosk key saved on this phone"), 300); } }
   showKey();
 
   function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
