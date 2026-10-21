@@ -99,16 +99,17 @@
     <div class="grid2">
       <div><label for="brand">Brand</label>
         <select id="brand">
+          <option>Amazon Gift Card</option><option>Visa Gift Card</option><option>American Express Gift Card</option>
           <option>Starbucks Gift Card</option><option>Chick-fil-A Gift Card</option><option>Chipotle Gift Card</option>
           <option>Domino's Gift Card</option><option>Olive Garden Gift Card</option><option>Panera Gift Card</option>
-          <option>Subway Gift Card</option><option>Visa Gift Card</option>
+          <option>Subway Gift Card</option>
         </select></div>
       <div><label for="amount">Value ($)</label><input id="amount" type="number" inputmode="decimal" min="1" step="1" placeholder="25"></div>
     </div>
-    <label for="number">Card number</label>
+    <label for="number" id="number-label">Card number</label>
     <input id="number" class="mono" inputmode="numeric" autocomplete="off" placeholder="Card number">
     <div class="grid2">
-      <div><label for="pin" id="pin-label">PIN / security code</label><input id="pin" class="mono" inputmode="numeric" autocomplete="off" placeholder="PIN"></div>
+      <div id="pin-wrap"><label for="pin" id="pin-label">PIN / security code</label><input id="pin" class="mono" inputmode="numeric" autocomplete="off" placeholder="PIN"></div>
       <div id="exp-wrap" hidden><label for="expires">Expires (MM/YY)</label><input id="expires" class="mono" inputmode="numeric" placeholder="MM/YY"></div>
     </div>
     <details><summary>What we read from the photos</summary><pre id="ocr-raw" style="white-space:pre-wrap;font-size:12px;color:#6b6b74;margin-top:6px"></pre></details>
@@ -142,7 +143,8 @@
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbxIFtva6IDLTqA2IYSAWJYaQz-RvYRuhVq2w3sPz9-hkGot22SonW3y-mH5bS3_QWdF/exec";
   const $ = id => document.getElementById(id);
   const ls = { get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
-  const BRANDS = ["Starbucks", "Chick-fil-A", "Chipotle", "Domino's", "Olive Garden", "Panera", "Subway", "Visa"];
+  const BRANDS = ["Amazon", "American Express", "Visa", "Starbucks", "Chick-fil-A", "Chipotle", "Domino's", "Olive Garden", "Panera", "Subway"];
+  const kind = b => /amazon/i.test(b) ? "amazon" : /visa|american express/i.test(b) ? "card" : "store";   // how the card is redeemed
   const shots = { front: null, back: null };          // compressed JPEG data URLs that get uploaded
 
   $("key").value = ls.get("tpp-kiosk-key");
@@ -210,13 +212,20 @@
 
     // brand: any known brand name on either side
     const low = text.toLowerCase();
-    const hit = BRANDS.find(b => low.includes(b.toLowerCase().replace("'", "")) || low.includes(b.toLowerCase()));
+    let hit = BRANDS.find(b => low.includes(b.toLowerCase().replace("'", "")) || low.includes(b.toLowerCase()));
+    if (!hit && /\bamex\b/.test(low)) hit = "American Express";
     if (hit) $("brand").value = hit + " Gift Card";
     // value: "$25" style
     const amt = /\$\s?(\d{1,4})(?:\.00)?\b/.exec(text);
     if (amt && !$("amount").value) $("amount").value = amt[1];
     if (side !== "back") { status("scan-status", hit ? "Front read: " + hit + ". Now photograph the back." : "Front saved. Now photograph the back.", "ok"); return; }
 
+    const claim = /\b([A-Z0-9]{4})[- ]?([A-Z0-9]{6})[- ]?([A-Z0-9]{4,5})\b/.exec(text.toUpperCase());
+    if (kind($("brand").value) === "amazon" && claim) {
+      $("number").value = claim.slice(1).join("-");
+      status("scan-status", "Got the gift card code! Double-check it below.", "ok");
+      return;
+    }
     // number: the longest run of digits (spaces/dashes allowed inside), 10-19 digits; the barcode helps if OCR misses
     const runs = (text.match(/\d[\d \-]{6,}\d/g) || []).map(s => s.replace(/[ \-]/g, "")).filter(s => s.length >= 4);
     let number = runs.filter(s => s.length >= 10 && s.length <= 19).sort((a, b) => b.length - a.length)[0] || "";
@@ -238,13 +247,17 @@
     const b = $("brand").value, amt = $("amount").value, num = $("number").value.replace(/\s/g, "");
     $("eg-brand").textContent = b.replace(" Gift Card", "") + " · e-Gift Card";
     $("eg-amt").textContent = amt ? "$" + amt : "";
-    $("eg-num").textContent = num ? num.replace(/(.{4})(?=.)/g, "$1 ") : "•••• •••• •••• ••••";
-    const visa = /visa/i.test(b);
-    $("exp-wrap").hidden = !visa; $("pin-label").textContent = visa ? "Security code (CVV)" : "PIN / security code";
+    $("eg-num").textContent = num ? (kind(b) === "amazon" ? num.toUpperCase() : num.replace(/(.{4})(?=.)/g, "$1 ")) : "•••• •••• •••• ••••";
+    const k = kind(b);
+    $("exp-wrap").hidden = k !== "card";
+    $("pin-wrap").hidden = k === "amazon";
+    $("pin-label").textContent = /american express/i.test(b) ? "Security code (CID, 4 digits)" : k === "card" ? "Security code (CVV)" : "PIN / security code";
+    $("number-label").textContent = k === "amazon" ? "Gift card code (back of the card)" : "Card number";
+    $("number").setAttribute("inputmode", k === "amazon" ? "text" : "numeric");
   }
   function validate() {
     const num = $("number").value.replace(/\s/g, "");
-    const ok = $("key").value.trim() && /^[0-9A-Za-z]{6,30}$/.test(num) && +$("amount").value > 0 && shots.front;
+    const ok = $("key").value.trim() && /^[0-9A-Za-z-]{6,30}$/.test(num) && +$("amount").value > 0 && shots.front;
     $("add").disabled = !ok;
     status("key-status", $("key").value.trim() ? "" : "Enter the kiosk key to add cards.", $("key").value.trim() ? "" : "err");
     return ok;
@@ -263,7 +276,8 @@
     try {
       const res = await call({
         action: "addcard", key: $("key").value.trim().toUpperCase(), brand: $("brand").value, amount: $("amount").value,
-        number: $("number").value.replace(/\s/g, ""), pin: $("pin").value.trim(), expires: $("expires").value.trim(),
+        number: $("number").value.replace(/\s/g, "").toUpperCase(), pin: kind($("brand").value) === "amazon" ? "" : $("pin").value.trim(),
+        expires: $("expires").value.trim(),
         front: shots.front, back: shots.back,
       });
       if (!res.ok) throw new Error(res.error || "not saved");
