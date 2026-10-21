@@ -7,131 +7,138 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#b3202a">
 <style>
-  /* TPP staff tool (user, 2026-10-21): photograph a physical gift card -> it becomes an e-gift card in the prize
-     wheel's stock. Saved to the prize sheet's "Gift Card Inventory" by the prize wheel Apps Script (needs the kiosk key). */
+  /* TPP staff tool (user, 2026-10-21; v2 photo-only flow): snap the front and back of a physical gift card -> the brand,
+     value, number and PIN are read automatically -> one tap adds it to the prize wheel as an e-gift card.
+     Reading: Google OCR in the prize wheel Apps Script (action "readcard"), with on-phone barcode + Tesseract as backup.
+     Separate from the kiosk on purpose: staff only, needs the kiosk key. */
   @font-face { font-family: "Anton"; src: url("assets/fonts/Anton-Regular.ttf") format("truetype"); font-display: swap; }
   @font-face { font-family: "Oswald"; src: url("assets/fonts/Oswald.ttf") format("truetype"); font-weight: 200 700; font-display: swap; }
-  :root { --red: #b3202a; --red-hi: #e2343e; --ink: #16161a; --muted: #6b6b74; --line: #e3e3e8; --bg: #f4f4f6; --card: #ffffff; --ok: #1f8a4c; }
+  :root { --red: #b3202a; --red-hi: #e2343e; --ink: #16161a; --muted: #6b6b74; --line: #e3e3e8; --bg: #f4f4f6; --ok: #1f8a4c; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--ink); font-family: "Oswald", system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
-  header { background: linear-gradient(120deg, var(--red-hi), var(--red) 60%, #6d1016); color: #fff; padding: 18px 16px 22px; }
-  header .row { max-width: 640px; margin: auto; display: flex; align-items: center; gap: 12px; }
-  header img { height: 44px; width: auto; }
-  header h1 { font-family: "Anton", sans-serif; font-weight: 400; text-transform: uppercase; font-size: 28px; line-height: 1; }
-  header p { opacity: .9; font-size: 15px; margin-top: 4px; }
-  main { max-width: 640px; margin: -10px auto 40px; padding: 0 16px; display: grid; gap: 14px; }
-  .panel { background: var(--card); border-radius: 16px; padding: 16px; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
-  .panel h2 { font-family: "Anton", sans-serif; font-weight: 400; text-transform: uppercase; letter-spacing: .03em; font-size: 20px; display: flex; align-items: center; gap: 10px; }
-  .panel h2 .n { width: 28px; height: 28px; border-radius: 50%; background: var(--red); color: #fff; display: grid; place-items: center; font-size: 15px; }
+  header { background: linear-gradient(120deg, var(--red-hi), var(--red) 60%, #6d1016); color: #fff; padding: 16px 16px 26px; }
+  header .row { max-width: 560px; margin: auto; display: flex; align-items: center; gap: 12px; }
+  header img { height: 42px; width: auto; }
+  header h1 { font-family: "Anton", sans-serif; font-weight: 400; text-transform: uppercase; font-size: 26px; line-height: 1; }
+  header p { opacity: .9; font-size: 14px; margin-top: 3px; }
+  .keychip { margin-left: auto; background: rgba(255,255,255,.18); border: 0; color: #fff; border-radius: 999px; padding: 6px 12px; font: 500 13px "Oswald", sans-serif; }
+  main { max-width: 560px; margin: -14px auto 40px; padding: 0 14px; display: grid; gap: 14px; }
+  .panel { background: #fff; border-radius: 18px; padding: 16px; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+  .panel h2 { font-family: "Anton", sans-serif; font-weight: 400; text-transform: uppercase; letter-spacing: .03em; font-size: 20px; }
   .hint { color: var(--muted); font-size: 14px; margin-top: 4px; }
-  label { display: block; font-size: 14px; color: var(--muted); margin-top: 12px; }
-  input, select { width: 100%; font: 500 18px "Oswald", system-ui, sans-serif; padding: 12px; border-radius: 12px; border: 2px solid var(--line); background: #fafafb; color: var(--ink); margin-top: 4px; }
-  input:focus, select:focus { outline: none; border-color: var(--red); background: #fff; }
-  input.mono { font-family: Consolas, Menlo, monospace; letter-spacing: .06em; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-  .shot { position: relative; aspect-ratio: 1.586; border-radius: 14px; border: 2px dashed #cfcfd6; background: #fafafb center / cover no-repeat;
-    display: grid; place-items: center; text-align: center; color: var(--muted); font-size: 15px; cursor: pointer; overflow: hidden; }
-  .shot.has { border-style: solid; border-color: var(--ok); color: transparent; }
-  .shot svg { width: 34px; height: 34px; display: block; margin: 0 auto 6px; }
+  input { width: 100%; font: 500 18px "Oswald", system-ui, sans-serif; padding: 12px; border-radius: 12px; border: 2px solid var(--line); background: #fafafb; color: var(--ink); margin-top: 6px; }
+  input:focus { outline: none; border-color: var(--red); background: #fff; }
+  .mono { font-family: Consolas, Menlo, monospace !important; letter-spacing: .06em; }
+  /* the two photo buttons */
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .shot { position: relative; aspect-ratio: 1.586; border-radius: 16px; border: 3px dashed #cfcfd6; background: #fafafb center / cover no-repeat;
+    display: grid; place-items: center; text-align: center; cursor: pointer; overflow: hidden; transition: border-color .2s, transform .15s; }
+  .shot:active { transform: scale(.97); }
+  .shot .lbl { font-family: "Anton", sans-serif; text-transform: uppercase; font-size: 20px; color: var(--ink); }
+  .shot .lbl small { display: block; font-family: "Oswald", sans-serif; text-transform: none; font-size: 13px; color: var(--muted); }
+  .shot svg { width: 40px; height: 40px; display: block; margin: 0 auto 4px; color: var(--red); }
+  .shot.next { border-color: var(--red); animation: nudge 1.4s ease-in-out infinite; }
+  @keyframes nudge { 50% { box-shadow: 0 0 0 6px rgba(226,52,62,.18); } }
+  .shot.has { border-style: solid; border-color: var(--ok); }
+  .shot.has .lbl { position: absolute; left: 8px; bottom: 8px; background: rgba(31,138,76,.92); color: #fff; font-size: 13px; padding: 3px 10px; border-radius: 999px; }
+  .shot.has .lbl small, .shot.has svg { display: none; }
   .shot input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .status { margin-top: 10px; font-size: 15px; color: var(--muted); min-height: 1.3em; }
-  .status.ok { color: var(--ok); } .status.err { color: var(--red); }
-  .bar { height: 6px; border-radius: 3px; background: var(--line); margin-top: 8px; overflow: hidden; display: none; }
-  .bar i { display: block; height: 100%; width: 0; background: var(--red); transition: width .2s; }
-  .btn { width: 100%; border: 0; border-radius: 14px; padding: 16px; margin-top: 14px; cursor: pointer; font: 400 20px "Anton", sans-serif;
-    letter-spacing: .05em; text-transform: uppercase; background: var(--red); color: #fff; box-shadow: 0 8px 20px rgba(179,32,42,.35); }
-  .btn:disabled { opacity: .45; box-shadow: none; }
-  .btn.ghost { background: #ececf0; color: var(--ink); box-shadow: none; font-size: 16px; padding: 12px; }
-  /* the e-gift card preview */
-  .egift { margin-top: 12px; border-radius: 18px; overflow: hidden; background: #111; color: #fff; position: relative; aspect-ratio: 1.586; box-shadow: 0 14px 34px rgba(0,0,0,.3); }
+  /* reading */
+  .reading { display: none; text-align: center; padding: 26px 10px; }
+  .reading.on { display: block; }
+  .spin { width: 54px; height: 54px; border-radius: 50%; border: 6px solid #f0d4d6; border-top-color: var(--red); margin: 0 auto 12px; animation: turn .8s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  /* result */
+  .result { display: none; }
+  .result.on { display: block; }
+  .egift { border-radius: 18px; overflow: hidden; background: #111; color: #fff; position: relative; aspect-ratio: 1.586; box-shadow: 0 14px 34px rgba(0,0,0,.3); }
   .egift .ph { position: absolute; inset: 0; background: #2a2a30 center / cover no-repeat; }
   .egift .ph::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,.85), rgba(0,0,0,.05) 60%); }
   .egift .tag { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,.6); padding: 4px 10px; border-radius: 999px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
-  .egift .amt { position: absolute; top: 10px; right: 12px; font: 400 30px "Anton", sans-serif; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
-  .egift .num { position: absolute; left: 14px; right: 14px; bottom: 30px; font: 600 19px Consolas, Menlo, monospace; letter-spacing: .12em; }
+  .egift .amt { position: absolute; top: 8px; right: 12px; font: 400 32px "Anton", sans-serif; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+  .egift .num { position: absolute; left: 14px; right: 14px; bottom: 30px; font: 600 18px Consolas, Menlo, monospace; letter-spacing: .1em; }
   .egift .by { position: absolute; left: 14px; bottom: 10px; font-size: 11px; opacity: .8; }
+  .facts { margin-top: 14px; border-top: 1px solid var(--line); }
+  .fact { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .fact > span { color: var(--muted); font-size: 14px; }
+  .fact input { margin: 0; padding: 8px 10px; font-size: 17px; }
+  .fact.missing input { border-color: var(--red-hi); background: #fff6f6; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; grid-column: 1 / -1; }
+  .chips button { border: 2px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 13px; font: 500 15px "Oswald", sans-serif; cursor: pointer; }
+  .chips button.on { background: var(--red); border-color: var(--red); color: #fff; }
+  .btn { width: 100%; border: 0; border-radius: 14px; padding: 17px; margin-top: 14px; cursor: pointer; font: 400 21px "Anton", sans-serif;
+    letter-spacing: .05em; text-transform: uppercase; background: var(--red); color: #fff; box-shadow: 0 8px 20px rgba(179,32,42,.35); }
+  .btn:disabled { opacity: .45; box-shadow: none; }
+  .btn.ghost { background: #ececf0; color: var(--ink); box-shadow: none; font-size: 16px; padding: 12px; }
+  .status { margin-top: 10px; font-size: 15px; color: var(--muted); min-height: 1.3em; text-align: center; }
+  .status.ok { color: var(--ok); } .status.err { color: var(--red); }
   .stock { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .stock span { background: #f0f0f3; border-radius: 999px; padding: 6px 12px; font-size: 15px; }
   .stock b { color: var(--red); }
-  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(140%); background: var(--ok); color: #fff; padding: 14px 22px; border-radius: 14px;
-    font-size: 17px; box-shadow: 0 10px 30px rgba(0,0,0,.25); transition: transform .35s cubic-bezier(.2,1.4,.4,1); z-index: 9; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(160%); background: var(--ok); color: #fff; padding: 14px 22px; border-radius: 14px;
+    font-size: 17px; box-shadow: 0 10px 30px rgba(0,0,0,.25); transition: transform .35s cubic-bezier(.2,1.4,.4,1); z-index: 9; white-space: nowrap; }
   .toast.show { transform: translateX(-50%) translateY(0); }
-  details summary { cursor: pointer; color: var(--muted); font-size: 14px; margin-top: 8px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-top: 10px; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <header>
   <div class="row">
     <img src="assets/img/shield.webp" alt="">
-    <div><h1>Gift Card Uploader</h1><p>Snap a physical gift card &rarr; it becomes an e-gift card on the prize wheel.</p></div>
+    <div><h1>Gift Card Uploader</h1><p>Two photos &rarr; an e-gift card on the prize wheel.</p></div>
+    <button class="keychip" id="keychip" hidden>Key &#10003;</button>
   </div>
 </header>
 
 <main>
-  <section class="panel" id="key-panel">
-    <h2><span class="n">&#9919;</span> Staff key</h2>
-    <label for="key">Kiosk key (from the prize sheet setup)</label>
+  <section class="panel" id="key-panel" hidden>
+    <h2>Staff key</h2>
+    <p class="hint">Type the kiosk key once. This phone remembers it.</p>
     <input id="key" class="mono" autocomplete="off" autocapitalize="characters" placeholder="e.g. 4F7A21C9">
-    <div class="status" id="key-status"></div>
+    <button class="btn" id="key-save">Save key</button>
   </section>
 
-  <section class="panel">
-    <h2><span class="n">1</span> Photograph the card</h2>
-    <p class="hint">Lay the card flat in good light. Scratch off the PIN first so it can be read.</p>
-    <div class="shots">
-      <label class="shot" id="shot-front">
-        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Front</span>
+  <section class="panel" id="capture">
+    <h2>Snap the card</h2>
+    <p class="hint">Scratch off the PIN first. Card flat, good light, fill the frame.</p>
+    <div class="shots" style="margin-top:12px">
+      <label class="shot next" id="shot-front">
+        <span class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>1 &middot; Front<small>tap to take photo</small></span>
         <input type="file" accept="image/*" capture="environment" id="front">
       </label>
       <label class="shot" id="shot-back">
-        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Back (number &amp; PIN)</span>
+        <span class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>2 &middot; Back<small>number &amp; PIN side</small></span>
         <input type="file" accept="image/*" capture="environment" id="back">
       </label>
     </div>
-    <div class="bar" id="bar"><i></i></div>
-    <div class="status" id="scan-status"></div>
+    <div class="reading" id="reading"><div class="spin"></div><div id="reading-msg">Reading the card&hellip;</div></div>
   </section>
 
-  <section class="panel">
-    <h2><span class="n">2</span> Check the details</h2>
-    <p class="hint">We read these from the photos. Fix anything that looks off.</p>
-    <div class="grid2">
-      <div><label for="brand">Brand</label>
-        <select id="brand">
-          <option>Amazon Gift Card</option><option>Visa Gift Card</option><option>American Express Gift Card</option>
-          <option>Starbucks Gift Card</option><option>Chick-fil-A Gift Card</option><option>Chipotle Gift Card</option>
-          <option>Domino's Gift Card</option><option>Five Guys Gift Card</option><option>Olive Garden Gift Card</option><option>Panera Gift Card</option>
-          <option>Subway Gift Card</option>
-        </select></div>
-      <div><label for="amount">Value ($)</label><input id="amount" type="number" inputmode="decimal" min="1" step="1" placeholder="25"></div>
+  <section class="panel result" id="result">
+    <div class="egift">
+      <div class="ph" id="eg-photo"></div>
+      <span class="tag" id="eg-brand">e-Gift Card</span>
+      <span class="amt" id="eg-amt"></span>
+      <div class="num" id="eg-num"></div>
+      <div class="by">Courtesy of Tenant Property Protection · Booth #527</div>
     </div>
-    <label for="number" id="number-label">Card number</label>
-    <input id="number" class="mono" inputmode="numeric" autocomplete="off" placeholder="Card number">
-    <div class="grid2">
-      <div id="pin-wrap"><label for="pin" id="pin-label">PIN / security code</label><input id="pin" class="mono" inputmode="numeric" autocomplete="off" placeholder="PIN"></div>
-      <div id="exp-wrap" hidden><label for="expires">Expires (MM/YY)</label><input id="expires" class="mono" inputmode="numeric" placeholder="MM/YY"></div>
+    <div class="facts">
+      <div class="fact" id="f-brand"><span>Brand</span><input id="brand" placeholder="Tap a brand below"><div class="chips" id="brand-chips"></div></div>
+      <div class="fact" id="f-amount"><span>Value</span><input id="amount" inputmode="decimal" placeholder="$"><div class="chips" id="amount-chips"></div></div>
+      <div class="fact" id="f-number"><span id="number-label">Card number</span><input id="number" class="mono" autocomplete="off"></div>
+      <div class="fact" id="f-pin"><span id="pin-label">PIN</span><input id="pin" class="mono" autocomplete="off" placeholder="if the card has one"></div>
+      <div class="fact" id="f-exp" hidden><span>Expires</span><input id="expires" class="mono" placeholder="MM/YY"></div>
     </div>
+    <button class="btn" id="add" disabled>Add to Spin the Wheel</button>
+    <button class="btn ghost" id="retake">Retake photos</button>
+    <div class="status" id="add-status"></div>
     <details><summary>What we read from the photos</summary><pre id="ocr-raw" style="white-space:pre-wrap;font-size:12px;color:#6b6b74;margin-top:6px"></pre></details>
   </section>
 
   <section class="panel">
-    <h2><span class="n">3</span> E-gift card preview</h2>
-    <div class="egift" id="egift">
-      <div class="ph" id="eg-photo"></div>
-      <span class="tag" id="eg-brand">e-Gift Card</span>
-      <span class="amt" id="eg-amt"></span>
-      <div class="num" id="eg-num">•••• •••• •••• ••••</div>
-      <div class="by">Courtesy of Tenant Property Protection · Booth #527</div>
-    </div>
-    <button class="btn" id="add" disabled>Add to Spin the Wheel</button>
-    <button class="btn ghost" id="reset">Clear &amp; scan the next card</button>
-    <div class="status" id="add-status"></div>
-  </section>
-
-  <section class="panel">
-    <h2><span class="n">&#10003;</span> E-gift cards in stock</h2>
-    <div class="stock" id="stock"><span>Loading…</span></div>
+    <h2>E-gift cards in stock</h2>
+    <div class="stock" id="stock"><span>Loading&hellip;</span></div>
   </section>
 </main>
 <div class="toast" id="toast"></div>
@@ -139,164 +146,176 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script>
-  // Same endpoint as the kiosk's prize wheel (tpp-kiosk/index.html PRIZE_ENDPOINT; staff-only, not linked from the kiosk).
+  // Same endpoint as the kiosk's prize wheel (tpp-kiosk/index.html PRIZE_ENDPOINT).
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbxIFtva6IDLTqA2IYSAWJYaQz-RvYRuhVq2w3sPz9-hkGot22SonW3y-mH5bS3_QWdF/exec";
   const $ = id => document.getElementById(id);
   const ls = { get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
-  const BRANDS = ["Amazon", "American Express", "Visa", "Starbucks", "Chick-fil-A", "Chipotle", "Domino's", "Five Guys", "Olive Garden", "Panera", "Subway"];
-  const kind = b => /amazon/i.test(b) ? "amazon" : /visa|american express/i.test(b) ? "card" : "store";   // how the card is redeemed
-  const shots = { front: null, back: null };          // compressed JPEG data URLs that get uploaded
+  // brand -> words that identify it on a card
+  const BRANDS = {
+    "Amazon": ["amazon"], "Visa": ["visa"], "American Express": ["american express", "amex"], "Starbucks": ["starbucks"],
+    "Chick-fil-A": ["chick-fil-a", "chickfila", "chick fil a"], "Chipotle": ["chipotle"], "Domino's": ["domino"],
+    "Five Guys": ["five guys", "fiveguys"], "Olive Garden": ["olive garden"], "Panera": ["panera"], "Subway": ["subway"],
+  };
+  const kind = b => /amazon/i.test(b) ? "amazon" : /visa|american express/i.test(b) ? "card" : "store";
+  const shots = { front: null, back: null };   // { up: JPEG data URL for upload/email, read: bigger canvas for reading }
+  const LBL = { front: document.querySelector("#shot-front .lbl").innerHTML, back: document.querySelector("#shot-back .lbl").innerHTML };
 
-  $("key").value = ls.get("tpp-kiosk-key");
-  $("key").addEventListener("input", () => { ls.set("tpp-kiosk-key", $("key").value.trim().toUpperCase()); validate(); });
+  // ---------- key
+  const key = () => ls.get("tpp-kiosk-key");
+  function showKey() { const has = !!key(); $("key-panel").hidden = has; $("keychip").hidden = !has; }
+  $("key-save").addEventListener("click", () => { ls.set("tpp-kiosk-key", $("key").value.trim().toUpperCase()); showKey(); showStock(); });
+  $("keychip").addEventListener("click", () => { $("key").value = key(); $("key-panel").hidden = false; });
+  showKey();
 
-  function status(id, msg, cls = "") { const el = $(id); el.textContent = msg; el.className = "status " + cls; }
   function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
+  function status(msg, cls = "") { const el = $("add-status"); el.textContent = msg; el.className = "status " + cls; }
 
-  // Load a photo, fix its size: a big version for reading, a smaller JPEG for upload / the email.
-  function loadImage(file) {
-    return new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = URL.createObjectURL(file); });
-  }
+  // ---------- photos
+  function loadImage(file) { return new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = URL.createObjectURL(file); }); }
   function toCanvas(img, maxW) {
     const s = Math.min(1, maxW / img.naturalWidth), c = document.createElement("canvas");
     c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); return c;
   }
-
   async function onPhoto(side, file) {
     if (!file) return;
     const img = await loadImage(file);
-    shots[side] = toCanvas(img, 1100).toDataURL("image/jpeg", 0.82);
-    const box = $("shot-" + side); box.style.backgroundImage = "url('" + shots[side] + "')"; box.classList.add("has");
-    if (side === "front") $("eg-photo").style.backgroundImage = "url('" + shots.front + "')";
-    await readCard(side, toCanvas(img, 1800));
-    preview(); validate();
+    shots[side] = { up: toCanvas(img, 1200).toDataURL("image/jpeg", 0.85), read: toCanvas(img, 1800) };
+    const box = $("shot-" + side); box.style.backgroundImage = "url('" + shots[side].up + "')"; box.classList.add("has"); box.classList.remove("next");
+    box.querySelector(".lbl").textContent = (side === "front" ? "Front" : "Back") + " ✓";
+    if (side === "front" && !shots.back) $("shot-back").classList.add("next");                          // the back tile pulses next
+    if (shots.front && shots.back) readCard();
   }
   $("front").addEventListener("change", e => onPhoto("front", e.target.files[0]));
   $("back").addEventListener("change", e => onPhoto("back", e.target.files[0]));
 
-  // ---------- reading the card: barcode first, then OCR text for the number, PIN and brand
-  let ocrWorker = null;
-  async function ocr(canvas) {
-    if (!ocrWorker) {
-      ocrWorker = await Tesseract.createWorker("eng", 1, { logger: m => { if (m.status === "recognizing text") bar(m.progress); } });
-    }
-    const { data } = await ocrWorker.recognize(canvas);
-    return data.text || "";
-  }
-  function bar(p) { $("bar").style.display = p >= 1 ? "none" : "block"; $("bar").firstElementChild.style.width = Math.round(p * 100) + "%"; }
-
-  async function readBarcode(canvas) {
-    try {
-      if ("BarcodeDetector" in window) {
-        const r = await new BarcodeDetector().detect(canvas);
-        if (r.length) return r[0].rawValue;
-      }
-    } catch (e) {}
-    try {
-      const img = new Image(); img.src = canvas.toDataURL("image/jpeg", 0.92); await img.decode();
-      const res = await new ZXing.BrowserMultiFormatReader().decodeFromImageElement(img);
-      return res && res.getText();
-    } catch (e) { return ""; }
-  }
-
-  async function readCard(side, canvas) {
-    status("scan-status", "Reading the " + side + " of the card…"); bar(0.02);
-    let code = "", text = "";
-    try {
-      if (side === "back") code = await readBarcode(canvas);
-      text = await ocr(canvas);
-    } catch (e) { status("scan-status", "Couldn't read the photo automatically. Type the details in below.", "err"); bar(1); return; }
-    bar(1);
-    $("ocr-raw").textContent += "— " + side.toUpperCase() + " —\n" + (code ? "Barcode: " + code + "\n" : "") + text.trim() + "\n\n";
-
-    // brand: any known brand name on either side
-    const low = text.toLowerCase();
-    let hit = BRANDS.find(b => low.includes(b.toLowerCase().replace("'", "")) || low.includes(b.toLowerCase()));
-    if (!hit && /\bamex\b/.test(low)) hit = "American Express";
-    if (hit) $("brand").value = hit + " Gift Card";
-    // value: "$25" style
-    const amt = /\$\s?(\d{1,4})(?:\.00)?\b/.exec(text);
-    if (amt && !$("amount").value) $("amount").value = amt[1];
-    if (side !== "back") { status("scan-status", hit ? "Front read: " + hit + ". Now photograph the back." : "Front saved. Now photograph the back.", "ok"); return; }
-
-    const claim = /\b([A-Z0-9]{4})[- ]?([A-Z0-9]{6})[- ]?([A-Z0-9]{4,5})\b/.exec(text.toUpperCase());
-    if (kind($("brand").value) === "amazon" && claim) {
-      $("number").value = claim.slice(1).join("-");
-      status("scan-status", "Got the gift card code! Double-check it below.", "ok");
-      return;
-    }
-    // number: the longest run of digits (spaces/dashes allowed inside), 10-19 digits; the barcode helps if OCR misses
-    const runs = (text.match(/\d[\d \-]{6,}\d/g) || []).map(s => s.replace(/[ \-]/g, "")).filter(s => s.length >= 4);
-    let number = runs.filter(s => s.length >= 10 && s.length <= 19).sort((a, b) => b.length - a.length)[0] || "";
-    const bc = (code || "").replace(/\D/g, "");
-    if (!number && bc.length >= 10) number = bc.slice(0, 19);
-    // PIN: digits right after PIN / security code / CSC / CVV / access, else a 3-8 digit run that isn't part of the number
-    const pinM = /(?:pin|security\s*code|csc|cvv|cvc|access\s*(?:no|number|code)?|code)\s*[:#]?\s*(\d[\d ]{2,9}\d)/i.exec(text);
-    let pin = pinM ? pinM[1].replace(/\s/g, "") : "";
-    if (!pin) pin = (text.match(/\b\d{3,8}\b/g) || []).find(s => !number.includes(s)) || "";
-    const exp = /\b(0[1-9]|1[0-2])\s?\/\s?(\d{2})\b/.exec(text);
-    if (number) $("number").value = number.replace(/(.{4})(?=.)/g, "$1 ");
-    if (pin) $("pin").value = pin;
-    if (exp) $("expires").value = exp[1] + "/" + exp[2];
-    status("scan-status", number ? "Got it! Double-check the number and PIN below." : "Couldn't find the card number. Type it in below, or retake the photo closer.", number ? "ok" : "err");
-  }
-
-  // ---------- preview + validation
-  function preview() {
-    const b = $("brand").value, amt = $("amount").value, num = $("number").value.replace(/\s/g, "");
-    $("eg-brand").textContent = b.replace(" Gift Card", "") + " · e-Gift Card";
-    $("eg-amt").textContent = amt ? "$" + amt : "";
-    $("eg-num").textContent = num ? (kind(b) === "amazon" ? num.toUpperCase() : num.replace(/(.{4})(?=.)/g, "$1 ")) : "•••• •••• •••• ••••";
-    const k = kind(b);
-    $("exp-wrap").hidden = k !== "card";
-    $("pin-wrap").hidden = k === "amazon";
-    $("pin-label").textContent = /american express/i.test(b) ? "Security code (CID, 4 digits)" : k === "card" ? "Security code (CVV)" : "PIN / security code";
-    $("number-label").textContent = k === "amazon" ? "Gift card code (back of the card)" : "Card number";
-    $("number").setAttribute("inputmode", k === "amazon" ? "text" : "numeric");
-  }
-  function validate() {
-    const num = $("number").value.replace(/\s/g, "");
-    const ok = $("key").value.trim() && /^[0-9A-Za-z-]{6,30}$/.test(num) && +$("amount").value > 0 && shots.front;
-    $("add").disabled = !ok;
-    status("key-status", $("key").value.trim() ? "" : "Enter the kiosk key to add cards.", $("key").value.trim() ? "" : "err");
-    return ok;
-  }
-  ["brand", "amount", "number", "pin", "expires"].forEach(id => $(id).addEventListener("input", () => { preview(); validate(); }));
-  $("brand").addEventListener("change", () => { preview(); validate(); });
-
-  // ---------- save to the prize sheet (text/plain JSON: a simple request, so the reply can be read)
+  // ---------- reading: Google OCR on the prize sheet's script first, the phone's own reader as backup
   async function call(body) {
     const r = await fetch(ENDPOINT, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
     return r.json();
   }
-  $("add").addEventListener("click", async () => {
-    if (!validate()) return;
-    $("add").disabled = true; status("add-status", "Adding to the prize wheel…");
+  let ocrWorker = null;
+  async function localOcr(canvas) {
+    if (!ocrWorker) ocrWorker = await Tesseract.createWorker("eng");
+    return (await ocrWorker.recognize(canvas)).data.text || "";
+  }
+  async function readBarcode(canvas) {
+    try { if ("BarcodeDetector" in window) { const r = await new BarcodeDetector().detect(canvas); if (r.length) return r[0].rawValue; } } catch (e) {}
     try {
+      const img = new Image(); img.src = canvas.toDataURL("image/jpeg", 0.92); await img.decode();
+      const res = await new ZXing.BrowserMultiFormatReader().decodeFromImageElement(img); return res && res.getText();
+    } catch (e) { return ""; }
+  }
+  async function readCard() {
+    $("reading").classList.add("on"); $("result").classList.remove("on");
+    $("reading-msg").textContent = "Reading the card…";
+    let front = "", back = "", via = "";
+    const barcode = readBarcode(shots.back.read);
+    try {
+      const r = await call({ action: "readcard", key: key(), front: shots.front.up, back: shots.back.up });
+      if (r.ok) { front = r.front || ""; back = r.back || ""; via = "Google"; }
+    } catch (e) {}
+    if (!(front + back).trim()) {                                         // backup: read on the phone
+      $("reading-msg").textContent = "Reading on this phone…";
+      try { front = await localOcr(shots.front.read); back = await localOcr(shots.back.read); via = "phone"; } catch (e) {}
+    }
+    const code = await barcode;
+    $("ocr-raw").textContent = "Read by: " + (via || "nothing") + (code ? "\nBarcode: " + code : "") + "\n\n— FRONT —\n" + front.trim() + "\n\n— BACK —\n" + back.trim();
+    fill(parse(front, back, code));
+    $("reading").classList.remove("on"); $("result").classList.add("on");
+    $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ---------- turning the text into brand / value / number / PIN
+  function parse(front, back, code) {
+    const all = (front + "\n" + back), low = all.toLowerCase();
+    const out = { brand: "", amount: "", number: "", pin: "", expires: "" };
+    out.brand = Object.keys(BRANDS).find(b => BRANDS[b].some(w => low.includes(w))) || "";
+    const amts = [...all.matchAll(/\$\s?(\d{1,4})(?:\.\d{2})?\b/g)].map(m => +m[1]).filter(v => v >= 5 && v <= 1000);
+    const count = v => amts.filter(x => x === v).length;
+    if (amts.length) out.amount = String(amts.sort((a, b) => count(b) - count(a) || b - a)[0]);   // most frequent, then largest
+    const up = back.toUpperCase();
+    if (out.brand === "Amazon" || /amazon/i.test(all)) {
+      const m = /\b([A-Z0-9]{4})[- ]?([A-Z0-9]{6})[- ]?([A-Z0-9]{4,5})\b/.exec(up);
+      if (m) { out.number = m.slice(1).join("-"); return out; }
+    }
+    const runs = (back.match(/\d[\d \-]{6,}\d/g) || []).map(s => s.replace(/[ \-]/g, ""));
+    out.number = runs.filter(s => s.length >= 12 && s.length <= 19).sort((a, b) => b.length - a.length)[0] || "";
+    const bc = (code || "").replace(/\D/g, "");
+    if (!out.number && bc.length >= 12) out.number = bc.slice(0, 19);
+    const pinM = /(?:pin|security\s*code|csc|cvv|cvc|cid|access\s*(?:no|number|code)?|scratch[^\n]*?)\s*[:#]?\s*(\d[\d ]{1,9}\d)/i.exec(back);
+    out.pin = pinM ? pinM[1].replace(/\s/g, "") : ((back.match(/\b\d{3,8}\b/g) || []).find(s => !out.number.includes(s)) || "");
+    const exp = /\b(0[1-9]|1[0-2])\s?\/\s?(\d{2})\b/.exec(all);
+    if (exp) out.expires = exp[1] + "/" + exp[2];
+    return out;
+  }
+
+  // ---------- result screen
+  const AMOUNTS = [10, 15, 20, 25, 50, 100];
+  function chips(el, values, onPick, current) {
+    el.innerHTML = "";
+    values.forEach(v => {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = v; b.className = String(v) === String(current) ? "on" : "";
+      b.addEventListener("click", () => { onPick(v); }); el.appendChild(b);
+    });
+  }
+  function fill(d) {
+    $("brand").value = d.brand; $("amount").value = d.amount;
+    $("number").value = kind(d.brand) === "amazon" ? d.number : d.number.replace(/(.{4})(?=.)/g, "$1 ");
+    $("pin").value = d.pin; $("expires").value = d.expires;
+    $("eg-photo").style.backgroundImage = "url('" + shots.front.up + "')";
+    refresh();
+  }
+  function refresh() {
+    const b = $("brand").value, k = kind(b), num = $("number").value.replace(/\s/g, "");
+    chips($("brand-chips"), Object.keys(BRANDS), v => { $("brand").value = v; refresh(); }, b);
+    chips($("amount-chips"), AMOUNTS.map(a => "$" + a), v => { $("amount").value = v.slice(1); refresh(); }, "$" + $("amount").value);
+    $("brand-chips").hidden = !!b && Object.keys(BRANDS).includes(b) && !$("f-brand").dataset.open;
+    $("amount-chips").hidden = +$("amount").value > 0 && !$("f-amount").dataset.open;
+    $("f-pin").hidden = k === "amazon"; $("f-exp").hidden = k !== "card";
+    $("number-label").textContent = k === "amazon" ? "Gift card code" : "Card number";
+    $("pin-label").textContent = /american express/i.test(b) ? "CID" : k === "card" ? "CVV" : "PIN";
+    $("eg-brand").textContent = (b || "Gift card") + " · e-Gift Card";
+    $("eg-amt").textContent = $("amount").value ? "$" + $("amount").value : "";
+    $("eg-num").textContent = num ? (k === "amazon" ? num.toUpperCase() : num.replace(/(.{4})(?=.)/g, "$1 ")) : "";
+    const okBrand = Object.keys(BRANDS).includes(b), okAmt = +$("amount").value > 0, okNum = /^[0-9A-Za-z-]{6,30}$/.test(num);
+    $("f-brand").classList.toggle("missing", !okBrand); $("f-amount").classList.toggle("missing", !okAmt); $("f-number").classList.toggle("missing", !okNum);
+    $("add").disabled = !(okBrand && okAmt && okNum && key());
+    if (!key()) status("Enter the kiosk key at the top to add cards.", "err");
+    else if (!okBrand || !okAmt || !okNum) status("Fill in the red " + (okBrand && okAmt ? "field" : "fields") + ", then add it.", "");
+    else status("Looks good? Add it.", "ok");
+  }
+  $("brand").addEventListener("focus", () => { $("f-brand").dataset.open = "1"; refresh(); });
+  $("amount").addEventListener("focus", () => { $("f-amount").dataset.open = "1"; refresh(); });
+  ["brand", "amount", "number", "pin", "expires"].forEach(id => $(id).addEventListener("input", refresh));
+
+  $("add").addEventListener("click", async () => {
+    $("add").disabled = true; status("Adding to the prize wheel…");
+    try {
+      const b = $("brand").value;
       const res = await call({
-        action: "addcard", key: $("key").value.trim().toUpperCase(), brand: $("brand").value, amount: $("amount").value,
-        number: $("number").value.replace(/\s/g, "").toUpperCase(), pin: kind($("brand").value) === "amazon" ? "" : $("pin").value.trim(),
-        expires: $("expires").value.trim(),
-        front: shots.front, back: shots.back,
+        action: "addcard", key: key(), brand: b + " Gift Card", amount: $("amount").value,
+        number: $("number").value.replace(/\s/g, "").toUpperCase(), pin: kind(b) === "amazon" ? "" : $("pin").value.trim(),
+        expires: $("expires").value.trim(), front: shots.front.up, back: shots.back.up,
       });
       if (!res.ok) throw new Error(res.error || "not saved");
-      status("add-status", "Added! " + $("brand").value.replace(" Gift Card", "") + " is now in the prize wheel.", "ok");
-      toast("✓ " + $("brand").value.replace(" Gift Card", "") + " $" + $("amount").value + " added");
-      showStock(res.stock); resetForm(true);
-    } catch (e) {
-      status("add-status", "Not added: " + e.message, "err"); $("add").disabled = false;
-    }
+      toast("✓ " + b + " $" + $("amount").value + " added to the wheel");
+      showStock(res.stock); startOver();
+    } catch (e) { status("Not added: " + e.message, "err"); $("add").disabled = false; }
   });
-  function resetForm(keepBrand) {
+
+  function startOver() {
     shots.front = shots.back = null;
-    ["front", "back"].forEach(s => { const b = $("shot-" + s); b.style.backgroundImage = ""; b.classList.remove("has"); $(s).value = ""; });
-    ["number", "pin", "expires"].forEach(id => $(id).value = "");
-    if (!keepBrand) $("amount").value = "";
-    $("eg-photo").style.backgroundImage = ""; $("ocr-raw").textContent = ""; status("scan-status", "");
-    preview(); validate();
+    ["front", "back"].forEach(s => {
+      const box = $("shot-" + s); box.style.backgroundImage = ""; box.classList.remove("has", "next"); $(s).value = "";
+      box.querySelector(".lbl").innerHTML = LBL[s];
+    });
+    $("shot-front").classList.add("next");
+    delete $("f-brand").dataset.open; delete $("f-amount").dataset.open;
+    $("result").classList.remove("on"); $("ocr-raw").textContent = ""; status("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  $("reset").addEventListener("click", () => { resetForm(false); status("add-status", ""); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  $("retake").addEventListener("click", startOver);
 
   async function showStock(s) {
     try { if (!s) s = await (await fetch(ENDPOINT + "?stock=1&t=" + Date.now())).json(); } catch (e) { s = null; }
@@ -305,7 +324,7 @@
     const rows = Object.entries(s);
     el.innerHTML = rows.length ? rows.map(([k, v]) => "<span>" + k.replace(" Gift Card", "") + " <b>" + v + "</b></span>").join("") : "<span>No cards yet</span>";
   }
-  preview(); validate(); showStock();
+  showStock();
 </script>
 </body>
 </html>
