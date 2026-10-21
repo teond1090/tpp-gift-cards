@@ -42,7 +42,29 @@
   .shot.has { border-style: solid; border-color: var(--ok); }
   .shot.has .lbl { position: absolute; left: 8px; bottom: 8px; background: rgba(31,138,76,.92); color: #fff; font-size: 13px; padding: 3px 10px; border-radius: 999px; }
   .shot.has .lbl small, .shot.has svg { display: none; }
-  .shot input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .shot { font: inherit; }
+  a { color: var(--red); }
+  /* in-page camera */
+  .cam { position: fixed; inset: 0; z-index: 20; background: #000; display: none; }
+  .cam.on { display: block; }
+  .cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .cam .frame { position: absolute; left: 7%; right: 7%; top: 50%; aspect-ratio: 1.586; transform: translateY(-58%); border-radius: 18px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.55); border: 3px solid rgba(255,255,255,.9); }
+  .cam .frame i { position: absolute; width: 28px; height: 28px; border: 5px solid #ffd166; }
+  .cam .frame i:nth-child(1) { left: -5px; top: -5px; border-right: 0; border-bottom: 0; border-radius: 14px 0 0 0; }
+  .cam .frame i:nth-child(2) { right: -5px; top: -5px; border-left: 0; border-bottom: 0; border-radius: 0 14px 0 0; }
+  .cam .frame i:nth-child(3) { left: -5px; bottom: -5px; border-right: 0; border-top: 0; border-radius: 0 0 0 14px; }
+  .cam .frame i:nth-child(4) { right: -5px; bottom: -5px; border-left: 0; border-top: 0; border-radius: 0 0 14px 0; }
+  .cam-top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px; color: #fff; }
+  .cam-top b { font: 400 22px "Anton", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+  .cam-top button { width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255,255,255,.2); color: #fff; font-size: 28px; line-height: 1; }
+  .cam-top span { width: 44px; }
+  .cam-msg { position: absolute; left: 0; right: 0; bottom: 150px; text-align: center; color: #fff; font-size: 18px; text-shadow: 0 2px 8px #000; padding: 0 20px; }
+  .cam-bottom { position: absolute; left: 0; right: 0; bottom: 34px; display: flex; justify-content: center; }
+  .shutter { width: 84px; height: 84px; border-radius: 50%; border: 6px solid #fff; background: var(--red-hi); box-shadow: 0 0 0 4px rgba(0,0,0,.3); }
+  .shutter:active { transform: scale(.92); }
+  .cam-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .cam-flash.go { opacity: .85; transition: none; }
   /* reading */
   .reading { display: none; text-align: center; padding: 26px 10px; }
   .reading.on { display: block; }
@@ -103,15 +125,17 @@
     <h2>Snap the card</h2>
     <p class="hint">Scratch off the PIN first. Card flat, good light, fill the frame.</p>
     <div class="shots" style="margin-top:12px">
-      <label class="shot next" id="shot-front">
+      <button type="button" class="shot next" id="shot-front">
         <span class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>1 &middot; Front<small>tap to take photo</small></span>
-        <input type="file" accept="image/*" capture="environment" id="front">
-      </label>
-      <label class="shot" id="shot-back">
+      </button>
+      <button type="button" class="shot" id="shot-back">
         <span class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>2 &middot; Back<small>number &amp; PIN side</small></span>
-        <input type="file" accept="image/*" capture="environment" id="back">
-      </label>
+      </button>
     </div>
+    <p class="hint" style="text-align:center;margin-top:10px">Camera not working? <a href="#" id="pick-front">Upload front</a> &middot; <a href="#" id="pick-back">Upload back</a></p>
+    <input type="file" accept="image/jpeg,image/png,image/webp,image/*" id="front" hidden>
+    <input type="file" accept="image/jpeg,image/png,image/webp,image/*" id="back" hidden>
+    <div class="status" id="photo-status"></div>
     <div class="reading" id="reading"><div class="spin"></div><div id="reading-msg">Reading the card&hellip;</div></div>
   </section>
 
@@ -142,6 +166,14 @@
   </section>
 </main>
 <div class="toast" id="toast"></div>
+<div class="cam" id="cam">
+  <video id="cam-video" playsinline autoplay muted></video>
+  <div class="frame" id="cam-frame"><i></i><i></i><i></i><i></i></div>
+  <div class="cam-top"><button type="button" id="cam-close">&times;</button><b id="cam-title">Front of the card</b><span></span></div>
+  <div class="cam-msg" id="cam-msg">Fit the card inside the frame</div>
+  <div class="cam-bottom"><button type="button" class="shutter" id="cam-shoot" aria-label="Take photo"></button></div>
+  <div class="cam-flash" id="cam-flash"></div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -172,15 +204,25 @@
 
   // ---------- photos
   function loadImage(file) { return new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = URL.createObjectURL(file); }); }
+  const W_ = el => el.naturalWidth || el.videoWidth || el.width, H_ = el => el.naturalHeight || el.videoHeight || el.height;
   function toCanvas(img, maxW) {
-    const s = Math.min(1, maxW / img.naturalWidth), c = document.createElement("canvas");
-    c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+    const s = Math.min(1, maxW / W_(img)), c = document.createElement("canvas");
+    c.width = Math.round(W_(img) * s); c.height = Math.round(H_(img) * s);
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); return c;
   }
+  function photoMsg(msg, cls = "") { const el = $("photo-status"); el.textContent = msg; el.className = "status " + cls; }
+  // from the file picker (fallback)
   async function onPhoto(side, file) {
     if (!file) return;
-    const img = await loadImage(file);
-    shots[side] = { up: toCanvas(img, 1200).toDataURL("image/jpeg", 0.85), read: toCanvas(img, 1800) };
+    let img;
+    try { img = await loadImage(file); }
+    catch (e) { photoMsg("That photo couldn't be opened (HEIC format?). Use the camera buttons above instead.", "err"); return; }
+    setShot(side, img);
+  }
+  // a captured image or canvas -> stored shot + tile preview
+  function setShot(side, src) {
+    shots[side] = { up: toCanvas(src, 1200).toDataURL("image/jpeg", 0.85), read: toCanvas(src, 1800) };
+    photoMsg("");
     const box = $("shot-" + side); box.style.backgroundImage = "url('" + shots[side].up + "')"; box.classList.add("has"); box.classList.remove("next");
     box.querySelector(".lbl").textContent = (side === "front" ? "Front" : "Back") + " ✓";
     if (side === "front" && !shots.back) $("shot-back").classList.add("next");                          // the back tile pulses next
@@ -188,6 +230,59 @@
   }
   $("front").addEventListener("change", e => onPhoto("front", e.target.files[0]));
   $("back").addEventListener("change", e => onPhoto("back", e.target.files[0]));
+  $("pick-front").addEventListener("click", e => { e.preventDefault(); $("front").click(); });
+  $("pick-back").addEventListener("click", e => { e.preventDefault(); $("back").click(); });
+
+  // ---------- in-page camera: front, then "flip it over", then back, without ever leaving this page
+  let stream = null, camSide = "front";
+  async function openCam(side) {
+    camSide = side;
+    try {
+      if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio: false,
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+    } catch (e) {
+      photoMsg("Camera blocked. Allow camera access for this site, or use “Upload front / back” below.", "err");
+      return;
+    }
+    $("cam-video").srcObject = stream;
+    $("cam").classList.add("on");
+    camLabels();
+  }
+  function camLabels() {
+    $("cam-title").textContent = camSide === "front" ? "Front of the card" : "Back of the card";
+    $("cam-msg").textContent = camSide === "front" ? "Fit the card inside the frame, then tap the red button"
+                                                    : "Now flip it over: number & PIN side inside the frame";
+  }
+  function closeCam() {
+    $("cam").classList.remove("on");
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    $("cam-video").srcObject = null;
+  }
+  // grab what's inside the on-screen frame (the video is shown with object-fit: cover)
+  function grabFrame() {
+    const v = $("cam-video"), vw = v.videoWidth, vh = v.videoHeight;
+    const box = v.getBoundingClientRect(), f = $("cam-frame").getBoundingClientRect();
+    const sc = Math.max(box.width / vw, box.height / vh), ox = (box.width - vw * sc) / 2, oy = (box.height - vh * sc) / 2;
+    const pad = 0.06;                                                      // a little margin around the card
+    let sx = (f.left - box.left - ox) / sc, sy = (f.top - box.top - oy) / sc, sw = f.width / sc, sh = f.height / sc;
+    sx -= sw * pad; sy -= sh * pad; sw *= 1 + 2 * pad; sh *= 1 + 2 * pad;
+    sx = Math.max(0, sx); sy = Math.max(0, sy); sw = Math.min(vw - sx, sw); sh = Math.min(vh - sy, sh);
+    const c = document.createElement("canvas"); c.width = Math.round(sw); c.height = Math.round(sh);
+    c.getContext("2d").drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    return c;
+  }
+  $("cam-shoot").addEventListener("click", () => {
+    const v = $("cam-video");
+    if (!v.videoWidth) return;                                             // camera still starting
+    const fl = $("cam-flash"); fl.classList.add("go"); setTimeout(() => fl.classList.remove("go"), 60);
+    if (navigator.vibrate) navigator.vibrate(30);
+    setShot(camSide, grabFrame());
+    if (camSide === "front" && !shots.back) { camSide = "back"; camLabels(); }   // same session: flip and shoot the back
+    else closeCam();
+  });
+  $("cam-close").addEventListener("click", closeCam);
+  $("shot-front").addEventListener("click", () => openCam("front"));
+  $("shot-back").addEventListener("click", () => openCam("back"));
 
   // ---------- reading: Google OCR on the prize sheet's script first, the phone's own reader as backup
   async function call(body) {
