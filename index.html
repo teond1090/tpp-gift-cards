@@ -430,7 +430,7 @@
     $("setup-banner").hidden = scriptReady;
     if ($("result").classList.contains("on")) refresh();
     if (!scriptReady) { el.innerHTML = "<span>Not available yet: install the updated prize wheel script.</span>"; return; }
-    const rows = Object.entries(s);
+    const rows = Object.entries(s).filter(([k]) => !k.startsWith("_"));
     el.innerHTML = rows.length ? rows.map(([k, v]) => "<span>" + k.replace(" Gift Card", "") + " <b>" + v + "</b></span>").join("") : "<span>No cards yet</span>";
   }
   showStock();
