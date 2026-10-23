@@ -45,7 +45,11 @@
 (function () {
   const app = document.getElementById("app");
   let c = null;
-  try { c = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1).replace(/-/g, "+").replace(/_/g, "/"))))); } catch (e) {}
+  try {
+    let b64 = location.hash.slice(1).replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";                                       // some browsers reject unpadded base64
+    c = JSON.parse(decodeURIComponent(escape(atob(b64))));
+  } catch (e) {}
   if (!c || !c.n) { app.innerHTML = '<div class="err">This link is missing the card details. Open it from your e-gift card email.</div>'; return; }
   const num = String(c.n).replace(/\s+/g, ""), pretty = num.replace(/(.{4})(?=.)/g, "$1 ");
   const brand = c.b || "Gift card", amount = c.a ? "$" + String(c.a).replace(/^\$/, "") : "", exp = c.e || "", cvv = c.p || "";
