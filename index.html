@@ -192,11 +192,11 @@
   const ls = { get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
   // brand -> words that identify it on a card
   const BRANDS = {
-    "Amazon": ["amazon"], "Visa": ["visa"], "American Express": ["american express", "amex"], "Starbucks": ["starbucks"],
+    "Amazon": ["amazon"], "Visa": ["visa"], "Mastercard": ["mastercard", "master card"], "American Express": ["american express", "amex"], "Starbucks": ["starbucks"],
     "Chick-fil-A": ["chick-fil-a", "chickfila", "chick fil a"], "Chipotle": ["chipotle"], "Domino's": ["domino"],
     "Five Guys": ["five guys", "fiveguys"], "Olive Garden": ["olive garden"], "Panera": ["panera"], "Subway": ["subway"],
   };
-  const kind = b => /amazon/i.test(b) ? "amazon" : /visa|american express/i.test(b) ? "card" : "store";
+  const kind = b => /amazon/i.test(b) ? "amazon" : /visa|mastercard|american express/i.test(b) ? "card" : "store";
   const shots = { front: null, back: null };   // { up: JPEG data URL for upload/email, read: bigger canvas for reading }
   const LBL = { front: document.querySelector("#shot-front .lbl").innerHTML, back: document.querySelector("#shot-back .lbl").innerHTML };
 
@@ -440,7 +440,7 @@
     }
     const best = bestNumber(front, back, code, extra);
     if (best) { out.number = best.num; out.kind = best.kind; }
-    if (!out.brand && best && best.kind && /visa|american express/i.test(best.kind)) out.brand = best.kind;   // the number tells the brand
+    if (!out.brand && best && best.kind && /visa|mastercard|american express/i.test(best.kind)) out.brand = best.kind;   // the number tells the brand
     const isBank = !!(best && best.kind);
     // expiry: labelled first, then any MM/YY
     const expL = /(?:valid\s*thru|good\s*thru|exp(?:ires|iry|\.)?|through)\s*[:#]?\s*(0[1-9]|1[0-2])\s?[\/\-]\s?(\d{2,4})\b/i.exec(all) || /\b(0[1-9]|1[0-2])\s?\/\s?(\d{2})\b/.exec(all);
