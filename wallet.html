@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Add your gift card to your phone</title>
+<!-- Winner helper (user, 2026-10-23: "easier to transfer to your Google Wallet without having to manually enter the numbers").
+     Nobody but the card's bank can push a payment card into Google Wallet / Apple Pay, so this page does the next best thing:
+     the card's details come in the link's #fragment (never sent to any server), each one has a Copy button, and one tap
+     opens the wallet app's add-card screen. Nothing is stored anywhere. -->
+<style>
+  :root { --red: #b3202a; --ink: #16161a; --mut: #6b6b74; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: #eef0f3; color: var(--ink); }
+  main { max-width: 520px; margin: 0 auto; padding: 22px 14px 40px; }
+  h1 { font-size: 22px; margin: 6px 0 4px; text-align: center; }
+  .sub { text-align: center; color: var(--mut); font-size: 14px; margin-bottom: 16px; }
+  .card { border-radius: 20px; padding: 22px; color: #fff; box-shadow: 0 14px 34px rgba(0,0,0,.25); margin-bottom: 16px; }
+  .card .top { display: flex; justify-content: space-between; align-items: baseline; font-weight: 800; font-size: 26px; }
+  .card .num { font-family: Consolas, Menlo, monospace; font-size: 20px; letter-spacing: 3px; margin-top: 26px; }
+  .card .foot { display: flex; justify-content: space-between; font-size: 11px; opacity: .85; margin-top: 14px; letter-spacing: 1px; }
+  .row { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.06); }
+  .row .lbl { font-size: 11px; letter-spacing: 2px; color: var(--mut); text-transform: uppercase; }
+  .row .val { font-family: Consolas, Menlo, monospace; font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+  .row .grow { flex: 1; min-width: 0; }
+  button { font: inherit; border: 0; border-radius: 999px; padding: 12px 18px; font-weight: 700; cursor: pointer; }
+  .copy { background: var(--ink); color: #fff; min-width: 86px; }
+  .copy.done { background: #1b8a3a; }
+  .open { display: block; width: 100%; background: var(--red); color: #fff; font-size: 17px; padding: 15px; margin-top: 14px; text-align: center; text-decoration: none; border-radius: 999px; }
+  .open.alt { background: #1d1d1f; }
+  .steps { background: #fff; border-radius: 14px; padding: 14px 16px; font-size: 14px; line-height: 1.5; margin-top: 14px; }
+  .steps b { display: block; margin-bottom: 4px; }
+  .note { font-size: 12px; color: var(--mut); text-align: center; margin-top: 14px; line-height: 1.5; }
+  .err { background: #fff; border-radius: 14px; padding: 18px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Add your gift card to your phone</h1>
+  <div class="sub">Tap Copy, then paste into the wallet's card form. No typing.</div>
+  <div id="app"></div>
+</main>
+<script>
+(function () {
+  const app = document.getElementById("app");
+  let c = null;
+  try { c = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1).replace(/-/g, "+").replace(/_/g, "/"))))); } catch (e) {}
+  if (!c || !c.n) { app.innerHTML = '<div class="err">This link is missing the card details. Open it from your e-gift card email.</div>'; return; }
+  const num = String(c.n).replace(/\s+/g, ""), pretty = num.replace(/(.{4})(?=.)/g, "$1 ");
+  const brand = c.b || "Gift card", amount = c.a ? "$" + String(c.a).replace(/^\$/, "") : "", exp = c.e || "", cvv = c.p || "";
+  const codeName = /american express/i.test(brand) ? "CID" : "CVV";
+  const ua = navigator.userAgent, isIOS = /iPhone|iPad|iPod/.test(ua), isAndroid = /Android/.test(ua);
+  const esc = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+  const row = (lbl, val, copyVal) => val ? '<div class="row"><div class="grow"><div class="lbl">' + lbl + '</div><div class="val">' + esc(val) + '</div></div>' +
+    '<button class="copy" data-copy="' + esc(copyVal || val) + '">Copy</button></div>' : "";
+  app.innerHTML =
+    '<div class="card" style="background:' + esc(c.c || "#1a1f71") + '"><div class="top"><span>' + esc(brand) + '</span><span>' + esc(amount) + '</span></div>' +
+    '<div class="num">' + esc(pretty) + '</div><div class="foot"><span>COURTESY OF TENANT PROPERTY PROTECTION</span><span>' + (exp ? "VALID THRU " + esc(exp) : "") + '</span></div></div>' +
+    row("Card number", pretty, num) + row("Expiry (MM/YY)", exp) + row(codeName, cvv) +
+    (isIOS ? '<a class="open" href="shoebox://">Open Apple Wallet</a>' : '') +
+    (isAndroid || !isIOS ? '<a class="open' + (isIOS ? " alt" : "") + '" href="https://pay.google.com/gp/w/home/paymentmethods">Open Google Wallet</a>' : '') +
+    '<div class="steps"><b>Then, in the wallet:</b>' +
+    (isIOS ? 'Tap <b>+</b> &rarr; Debit or Credit Card &rarr; <b>Enter Card Details Manually</b>, paste the number, expiry and ' + codeName + '.'
+           : 'Tap <b>Add to Wallet</b> &rarr; Payment card &rarr; <b>New credit or debit card</b>, paste the number, expiry and ' + codeName + '.') +
+    '</div>' +
+    '<div class="note">Some prepaid cards must be registered (name + ZIP) at the website on the back of the card before a phone will add them. ' +
+    'This page keeps nothing: the details live only in your link. Treat it like cash.</div>';
+  app.querySelectorAll(".copy").forEach(b => b.addEventListener("click", async () => {
+    const v = b.getAttribute("data-copy");
+    try { await navigator.clipboard.writeText(v); } catch (e) {
+      const t = document.createElement("textarea"); t.value = v; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e2) {} t.remove();
+    }
+    b.textContent = "Copied"; b.classList.add("done"); setTimeout(() => { b.textContent = "Copy"; b.classList.remove("done"); }, 1800);
+  }));
+})();
+</script>
+</body>
+</html>
