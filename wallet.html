@@ -58,9 +58,10 @@
     '<div class="card" style="background:' + esc(c.c || "#1a1f71") + '"><div class="top"><span>' + esc(brand) + '</span><span>' + esc(amount) + '</span></div>' +
     '<div class="num">' + esc(pretty) + '</div><div class="foot"><span>COURTESY OF TENANT PROPERTY PROTECTION</span><span>' + (exp ? "VALID THRU " + esc(exp) : "") + '</span></div></div>' +
     row("Card number", pretty, num) + row("Expiry (MM/YY)", exp) + row(codeName, cvv) +
-    (isIOS ? '<a class="open" href="shoebox://">Open Apple Wallet</a>' : '') +
-    (isAndroid || !isIOS ? '<a class="open' + (isIOS ? " alt" : "") + '" href="https://pay.google.com/gp/w/home/paymentmethods">Open Google Wallet</a>' : '') +
-    '<div class="steps"><b>Then, in the wallet:</b>' +
+    (isIOS ? '<a class="open" href="shoebox://" id="open-apple">Open Apple Wallet</a>' : '') +
+    (isAndroid || !isIOS ? '<a class="open' + (isIOS ? " alt" : "") + '" href="https://wallet.google.com/" id="open-google">Open Google Wallet</a>' : '') +
+    '<div class="note" id="open-note">If the wallet didn&#39;t open: this email app&#39;s built-in browser may block it. Tap the three dots / share icon and choose <b>Open in Safari</b> or <b>Open in Chrome</b>, or just open the Wallet app yourself and come back here to copy.</div>' +
+    '<div class="steps"><b>How it works (about 30 seconds):</b>1. Tap <b>Copy</b> next to the card number. 2. Open the wallet and start adding a card. 3. Paste. 4. Come back for the expiry and ' + codeName + '.<br><br><b>In the wallet:</b> ' +
     (isIOS ? 'Tap <b>+</b> &rarr; Debit or Credit Card &rarr; <b>Enter Card Details Manually</b>, paste the number, expiry and ' + codeName + '.'
            : 'Tap <b>Add to Wallet</b> &rarr; Payment card &rarr; <b>New credit or debit card</b>, paste the number, expiry and ' + codeName + '.') +
     '</div>' +
@@ -68,11 +69,22 @@
     'This page keeps nothing: the details live only in your link. Treat it like cash.</div>';
   app.querySelectorAll(".copy").forEach(b => b.addEventListener("click", async () => {
     const v = b.getAttribute("data-copy");
-    try { await navigator.clipboard.writeText(v); } catch (e) {
-      const t = document.createElement("textarea"); t.value = v; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e2) {} t.remove();
+    let done = false;
+    try { await navigator.clipboard.writeText(v); done = true; } catch (e) {}
+    if (!done) {
+      const t = document.createElement("textarea"); t.value = v; t.setAttribute("readonly", ""); t.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      document.body.appendChild(t); t.focus(); t.select(); t.setSelectionRange(0, 99999);
+      try { done = document.execCommand("copy"); } catch (e2) {} t.remove();
+    }
+    if (!done) {                                                            // last resort: select the value so a long-press copies it
+      const val = b.parentElement.querySelector(".val"); const r = document.createRange(); r.selectNodeContents(val);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      b.textContent = "Hold to copy"; setTimeout(() => { b.textContent = "Copy"; }, 2500); return;
     }
     b.textContent = "Copied"; b.classList.add("done"); setTimeout(() => { b.textContent = "Copy"; b.classList.remove("done"); }, 1800);
   }));
+  // values are tap-to-select too
+  app.querySelectorAll(".val").forEach(v => v.addEventListener("click", () => { const r = document.createRange(); r.selectNodeContents(v); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }));
 })();
 </script>
 </body>
