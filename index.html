@@ -44,6 +44,8 @@
   .shot.has .lbl small, .shot.has svg { display: none; }
   .shot { font: inherit; }
   a { color: var(--red); }
+  .num-check { font-size: 13px; margin-top: 6px; min-height: 16px; }
+  .num-check.ok { color: #1b8a3a; } .num-check.warn { color: #b3202a; font-weight: 600; }
   /* in-page camera */
   .cam { position: fixed; inset: 0; z-index: 20; background: #000; display: none; }
   .cam.on { display: block; }
@@ -156,7 +158,7 @@
     <div class="facts">
       <div class="fact" id="f-brand"><span>Brand</span><input id="brand" placeholder="Tap a brand below"><div class="chips" id="brand-chips"></div></div>
       <div class="fact" id="f-amount"><span>Value</span><input id="amount" inputmode="decimal" placeholder="$"><div class="chips" id="amount-chips"></div></div>
-      <div class="fact" id="f-number"><span id="number-label">Card number</span><input id="number" class="mono" autocomplete="off"></div>
+      <div class="fact" id="f-number"><span id="number-label">Card number</span><input id="number" class="mono" autocomplete="off"><div id="num-check" class="num-check"></div></div>
       <div class="fact" id="f-pin"><span id="pin-label">PIN</span><input id="pin" class="mono" autocomplete="off" placeholder="if the card has one"></div>
       <div class="fact" id="f-exp" hidden><span>Expires</span><input id="expires" class="mono" placeholder="MM/YY"></div>
     </div>
@@ -298,10 +300,47 @@
     const r = await fetch(ENDPOINT, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
     return r.json();
   }
-  let ocrWorker = null;
+  let ocrWorker = null, digitWorker = null;
   async function localOcr(canvas) {
     if (!ocrWorker) ocrWorker = await Tesseract.createWorker("eng");
     return (await ocrWorker.recognize(canvas)).data.text || "";
+  }
+  // digits-only pass (embossed card numbers): Tesseract with a digit whitelist, treated as one line of text
+  async function digitOcr(canvas) {
+    if (!digitWorker) { digitWorker = await Tesseract.createWorker("eng"); await digitWorker.setParameters({ tessedit_char_whitelist: "0123456789 ", tessedit_pageseg_mode: "6" }); }
+    return (await digitWorker.recognize(canvas)).data.text || "";
+  }
+  // enhanced copies of a photo that make raised / low-contrast digits readable
+  function enhance(src, mode) {
+    const c = document.createElement("canvas"); c.width = src.width; c.height = src.height;
+    const g = c.getContext("2d"); g.drawImage(src, 0, 0);
+    const im = g.getImageData(0, 0, c.width, c.height), d = im.data, n = c.width * c.height;
+    const gray = new Float32Array(n);
+    for (let i = 0; i < n; i++) gray[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+    let out = gray;
+    if (mode === "contrast") {                                               // stretch the middle 2-98% to full range
+      const sorted = Float32Array.from(gray).sort(), lo = sorted[Math.floor(n * .02)], hi = sorted[Math.floor(n * .98)];
+      out = gray.map(v => (v - lo) * 255 / Math.max(1, hi - lo));
+    } else if (mode === "sharp" || mode === "emboss") {                       // unsharp mask / high-pass: pulls embossed edges
+      const w = c.width, h = c.height, blur = new Float32Array(n), r = mode === "sharp" ? 2 : 6;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let sum = 0, k = 0;
+        for (let dy = -r; dy <= r; dy += r) for (let dx = -r; dx <= r; dx += r) {
+          const yy = Math.min(h - 1, Math.max(0, y + dy)), xx = Math.min(w - 1, Math.max(0, x + dx)); sum += gray[yy * w + xx]; k++;
+        }
+        blur[y * w + x] = sum / k;
+      }
+      out = gray.map((v, i) => mode === "sharp" ? v + 1.6 * (v - blur[i]) : 128 + 3.5 * (v - blur[i]));
+    }
+    for (let i = 0; i < n; i++) { const v = Math.max(0, Math.min(255, out[i])); d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; }
+    g.putImageData(im, 0, 0);
+    return c;
+  }
+  // the band where the number is printed on a bank card (lower middle), upscaled for the digit reader
+  function numberBand(src) {
+    const c = document.createElement("canvas"); c.width = src.width * 2; c.height = Math.round(src.height * 0.38) * 2;
+    c.getContext("2d").drawImage(src, 0, Math.round(src.height * 0.40), src.width, Math.round(src.height * 0.38), 0, 0, c.width, c.height);
+    return c;
   }
   async function readBarcode(canvas) {
     try { if ("BarcodeDetector" in window) { const r = await new BarcodeDetector().detect(canvas); if (r.length) return r[0].rawValue; } } catch (e) {}
@@ -313,27 +352,83 @@
   async function readCard() {
     $("reading").classList.add("on"); $("result").classList.remove("on");
     $("reading-msg").textContent = "Reading the card…";
-    let front = "", back = "", via = "";
+    let front = "", back = "", via = "", extra = "";
     const barcode = readBarcode(shots.back.read);
+    const frontC = enhance(shots.front.read, "contrast"), frontE = enhance(shots.front.read, "emboss"), frontS = enhance(numberBand(shots.front.read), "sharp");
+    // the phone's digit reader runs on the enhanced copies while Google reads the photos (all results are pooled)
+    const digits = (async () => {
+      const parts = [];
+      for (const c of [frontS, frontC, frontE, enhance(numberBand(shots.back.read), "sharp")]) { try { parts.push(await digitOcr(c)); } catch (e) {} }
+      return parts.join("\n");
+    })();
     try {
-      const r = await call({ action: "readcard", key: key(), front: shots.front.up, back: shots.back.up });
-      if (r.ok) { front = r.front || ""; back = r.back || ""; via = "Google"; }
+      const r = await call({ action: "readcard", key: key(), front: shots.front.up, back: shots.back.up, extras: [frontC.toDataURL("image/jpeg", 0.85)] });
+      if (r.ok) { front = r.front || ""; back = r.back || ""; extra = (r.extras || []).join("\n"); via = "Google"; }
     } catch (e) {}
     if (!(front + back).trim()) {                                         // backup: read on the phone
       $("reading-msg").textContent = "Reading on this phone…";
       try { front = await localOcr(shots.front.read); back = await localOcr(shots.back.read); via = "phone"; } catch (e) {}
     }
+    $("reading-msg").textContent = "Checking the card number…";
+    extra += "\n" + await digits;
     const code = await barcode;
-    $("ocr-raw").textContent = "Read by: " + (via || "nothing") + (code ? "\nBarcode: " + code : "") + "\n\n— FRONT —\n" + front.trim() + "\n\n— BACK —\n" + back.trim();
-    fill(parse(front, back, code));
+    $("ocr-raw").textContent = "Read by: " + (via || "nothing") + (code ? "\nBarcode: " + code : "") + "\n\n— FRONT —\n" + front.trim() + "\n\n— BACK —\n" + back.trim() + "\n\n— DIGIT PASSES —\n" + extra.trim();
+    fill(parse(front, back, code, extra));
     $("reading").classList.remove("on"); $("result").classList.add("on");
     $("result").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // ---------- turning the text into brand / value / number / PIN
-  function parse(front, back, code) {
-    const all = (front + "\n" + back), low = all.toLowerCase();
-    const out = { brand: "", amount: "", number: "", pin: "", expires: "" };
+  // OCR confusions inside a digit run: letters that look like digits
+  const DIGITISH = { O: "0", o: "0", Q: "0", D: "0", I: "1", l: "1", "|": "1", i: "1", Z: "2", z: "2", S: "5", s: "5", B: "8", G: "6", T: "7" };
+  function toDigits(run) { return run.replace(/[OoQDIl|iZzSsBGT]/g, ch => DIGITISH[ch]).replace(/[^0-9]/g, ""); }
+  function luhn(num) {
+    let sum = 0, dbl = false;
+    for (let i = num.length - 1; i >= 0; i--) { let d = +num[i]; if (dbl) { d *= 2; if (d > 9) d -= 9; } sum += d; dbl = !dbl; }
+    return num.length >= 13 && sum % 10 === 0;
+  }
+  // what kind of number is this? (bank cards have a fixed length + Luhn check; store cards are 16-19 digits)
+  function numberKind(num) {
+    if (/^4\d{15}$/.test(num) && luhn(num)) return "Visa";
+    if (/^3[47]\d{13}$/.test(num) && luhn(num)) return "American Express";
+    if ((/^5[1-5]\d{14}$/.test(num) || /^2[2-7]\d{14}$/.test(num)) && luhn(num)) return "Mastercard";
+    if (/^6(?:011|5\d{2})\d{12}$/.test(num) && luhn(num)) return "Discover";
+    return "";
+  }
+  // every digit-looking run in a text, with where it came from
+  function numberCandidates(text, where) {
+    const out = [];
+    for (const m of text.matchAll(/[0-9OoQDIl|iZzSsBGT][0-9OoQDIl|iZzSsBGT \-\.]{8,}[0-9OoQDIl|iZzSsBGT]/g)) {
+      const raw = m[0], num = toDigits(raw);
+      if (num.length < 12 || num.length > 19) continue;
+      if (/^(\d)\1+$/.test(num)) continue;                                 // 0000000000000000 is not a card
+      const letters = (raw.match(/[A-Za-z|]/g) || []).length;
+      const kind = numberKind(num);
+      let score = 0;
+      if (kind) score += 100;                                                // a real, checksum-valid bank number
+      else if (num.length >= 16) score += 40;                                // store card
+      else score += 10;
+      score -= letters * 4;                                                  // repairs cost confidence
+      if (kind && where === "front") score += 10;                            // bank numbers live on the front
+      if (!kind && where === "back") score += 5;                             // store numbers usually on the back
+      if (where === "barcode") score += 30;                                  // a barcode read is exact
+      out.push({ num, kind, score, where });
+    }
+    return out;
+  }
+  function bestNumber(front, back, code, extra) {
+    const pool = [...numberCandidates(front, "front"), ...numberCandidates(back, "back"), ...numberCandidates(extra || "", "extra")];
+    const bc = (code || "").replace(/\D/g, "");
+    if (bc.length >= 12 && bc.length <= 19) pool.push({ num: bc, kind: numberKind(bc), score: 70 + (numberKind(bc) ? 30 : 0), where: "barcode" });
+    // the same number seen by several reads gains confidence
+    const votes = {}; pool.forEach(c => { votes[c.num] = (votes[c.num] || 0) + 1; });
+    pool.forEach(c => { c.score += (votes[c.num] - 1) * 25; });
+    pool.sort((x, y) => y.score - x.score || y.num.length - x.num.length);
+    return pool[0] || null;
+  }
+  function parse(front, back, code, extra) {
+    const all = (front + "\n" + back + "\n" + (extra || "")), low = all.toLowerCase();
+    const out = { brand: "", amount: "", number: "", pin: "", expires: "", kind: "" };
     out.brand = Object.keys(BRANDS).find(b => BRANDS[b].some(w => low.includes(w))) || "";
     const amts = [...all.matchAll(/\$\s?(\d{1,4})(?:\.\d{2})?\b/g)].map(m => +m[1]).filter(v => v >= 5 && v <= 1000);
     const count = v => amts.filter(x => x === v).length;
@@ -343,14 +438,24 @@
       const m = /\b([A-Z0-9]{4})[- ]?([A-Z0-9]{6})[- ]?([A-Z0-9]{4,5})\b/.exec(up);
       if (m) { out.number = m.slice(1).join("-"); return out; }
     }
-    const runs = (back.match(/\d[\d \-]{6,}\d/g) || []).map(s => s.replace(/[ \-]/g, ""));
-    out.number = runs.filter(s => s.length >= 12 && s.length <= 19).sort((a, b) => b.length - a.length)[0] || "";
-    const bc = (code || "").replace(/\D/g, "");
-    if (!out.number && bc.length >= 12) out.number = bc.slice(0, 19);
-    const pinM = /(?:pin|security\s*code|csc|cvv|cvc|cid|access\s*(?:no|number|code)?|scratch[^\n]*?)\s*[:#]?\s*(\d[\d ]{1,9}\d)/i.exec(back);
-    out.pin = pinM ? pinM[1].replace(/\s/g, "") : ((back.match(/\b\d{3,8}\b/g) || []).find(s => !out.number.includes(s)) || "");
-    const exp = /\b(0[1-9]|1[0-2])\s?\/\s?(\d{2})\b/.exec(all);
-    if (exp) out.expires = exp[1] + "/" + exp[2];
+    const best = bestNumber(front, back, code, extra);
+    if (best) { out.number = best.num; out.kind = best.kind; }
+    if (!out.brand && best && best.kind && /visa|american express/i.test(best.kind)) out.brand = best.kind;   // the number tells the brand
+    const isBank = !!(best && best.kind);
+    // expiry: labelled first, then any MM/YY
+    const expL = /(?:valid\s*thru|good\s*thru|exp(?:ires|iry|\.)?|through)\s*[:#]?\s*(0[1-9]|1[0-2])\s?[\/\-]\s?(\d{2,4})\b/i.exec(all) || /\b(0[1-9]|1[0-2])\s?\/\s?(\d{2})\b/.exec(all);
+    if (expL) out.expires = expL[1] + "/" + expL[2].slice(-2);
+    // security code: Amex CID = 4 digits on the FRONT (not part of the number); Visa CVV = 3 digits on the back; store PIN = labelled
+    if (isBank && /american express/i.test(best.kind)) {
+      const m = (front.match(/\b\d{4}\b/g) || []).find(d => !out.number.includes(d) && !/^(19|20)\d\d$/.test(d));
+      out.pin = m || "";
+    } else if (isBank) {
+      const lab = /(?:cvv|cvc|csc|security\s*code|cv2)\s*[:#]?\s*(\d{3})\b/i.exec(all);
+      out.pin = lab ? lab[1] : ((back.match(/\b\d{3}\b/g) || []).find(d => !out.number.includes(d)) || "");
+    } else {
+      const pinM = /(?:pin|security\s*code|csc|cvv|cvc|cid|access\s*(?:no|number|code)?|scratch[^\n]*?)\s*[:#]?\s*(\d[\d ]{1,9}\d)/i.exec(back);
+      out.pin = pinM ? pinM[1].replace(/\s/g, "") : ((back.match(/\b\d{3,8}\b/g) || []).find(s => !out.number.includes(s)) || "");
+    }
     return out;
   }
 
@@ -382,6 +487,9 @@
     $("eg-brand").textContent = (b || "Gift card") + " · e-Gift Card";
     $("eg-amt").textContent = $("amount").value ? "$" + $("amount").value : "";
     $("eg-num").textContent = num ? (k === "amazon" ? num.toUpperCase() : num.replace(/(.{4})(?=.)/g, "$1 ")) : "";
+    const nk = numberKind(num), bankBrand = k === "card";
+    $("num-check").textContent = !num ? "" : nk ? "\u2713 Valid " + nk + " number (" + num.length + " digits)" : bankBrand ? "\u26A0 Check this number against the card: it fails the " + (b || "card") + " checksum" : num.length >= 16 ? "\u2713 " + num.length + "-digit card number" : "\u26A0 Short for a card number: check it";
+    $("num-check").className = "num-check " + (!num ? "" : nk || (!bankBrand && num.length >= 16) ? "ok" : "warn");
     const okBrand = Object.keys(BRANDS).includes(b), okAmt = +$("amount").value > 0, okNum = /^[0-9A-Za-z-]{6,30}$/.test(num);
     $("f-brand").classList.toggle("missing", !okBrand); $("f-amount").classList.toggle("missing", !okAmt); $("f-number").classList.toggle("missing", !okNum);
     $("add").disabled = !(okBrand && okAmt && okNum && key() && scriptReady);
