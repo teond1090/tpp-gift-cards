@@ -100,7 +100,7 @@
     <div class="status" id="status"></div>
     <div class="wrap">
       <table>
-        <thead><tr><th>When</th><th>Email</th><th>Prize</th><th>Updates</th><th>Handed out</th><th>Status</th><th>Kiosk</th><th>Code</th></tr></thead>
+        <thead><tr><th>When</th><th>Email</th><th>Prize</th><th>Updates</th><th>Handed out</th><th>Status</th><th>Kiosk</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty" hidden>No entries yet.</div>
@@ -162,7 +162,6 @@
       (!q || [r.email, r.prize, r.kiosk, r.status, r.id].join(" ").toLowerCase().includes(q)));
   }
   const when = t => { const d = new Date(t); return isNaN(d) ? esc(t) : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); };
-  const code = r => r.id.replace(/[^0-9a-z]/gi, "").slice(-6).toUpperCase();
   function render() {
     const gifts = rows.filter(isGift);
     $("st-total").textContent = rows.length;
@@ -183,7 +182,6 @@
         "<td>" + (isGift(r) ? '<input type="checkbox" data-row="' + r.row + '" data-id="' + esc(r.id) + '"' + (r.handed ? " checked" : "") + ' aria-label="Handed out">' : "") + "</td>" +
         '<td><span class="tag ' + tag + '">' + esc(st) + "</span></td>" +
         "<td>" + esc(r.kiosk) + "</td>" +
-        '<td class="mono">' + (isGift(r) ? code(r) : "") + "</td>" +
         "</tr>";
     }).join("");
   }
@@ -205,8 +203,8 @@
   // ---------- export (CSV = the CRM import file; emails + the fields that matter for a lead)
   $("csv").addEventListener("click", () => {
     const list = filtered();
-    const head = ["Email", "Prize", "Marketing opt-in", "Won at", "Kiosk", "Handed out", "Status", "Claim code", "Source"];
-    const body = list.map(r => [r.email, r.prize, r.optin ? "Yes" : "No", r.time, r.kiosk, isGift(r) ? (r.handed ? "Yes" : "No") : "", r.status, isGift(r) ? code(r) : "", "TPP prize wheel, Booth #527"]);
+    const head = ["Email", "Prize", "Marketing opt-in", "Won at", "Kiosk", "Handed out", "Status", "Source"];
+    const body = list.map(r => [r.email, r.prize, r.optin ? "Yes" : "No", r.time, r.kiosk, isGift(r) ? (r.handed ? "Yes" : "No") : "", r.status, "TPP prize wheel, Booth #527"]);
     const csv = "﻿" + [head].concat(body).map(row => row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\r\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
