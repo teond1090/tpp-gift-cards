@@ -540,6 +540,9 @@
     if (!scriptReady) { el.innerHTML = "<span>Not available yet: install the updated prize wheel script.</span>"; return; }
     const rows = Object.entries(s).filter(([k]) => !k.startsWith("_"));
     el.innerHTML = rows.length ? rows.map(([k, v]) => "<span>" + k.replace(" Gift Card", "") + " <b>" + v + "</b></span>").join("") : "<span>No cards yet</span>";
+    // 2026-10-26: gift cards are handed out at the booth (prize script GIFT_DELIVERY = handout); the inventory is a record only
+    if (s._delivery === "handout") el.innerHTML += '<span style="flex-basis:100%;color:#b3202a;font-weight:600">Handout mode: cards are handed to winners at the booth. ' +
+      'Cards added here are kept as a record and are NOT emailed. Leads: <a href="leads.html">leads.html</a></span>';
   }
   showStock();
 </script>

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TPP Prize Wheel Leads</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#b3202a">
+<style>
+  /* Staff leads page (user, 2026-10-26: "another clickable link that can track all the email submissions so we can add
+     them to our leads"). Reads the Winners tab of the "TPP Prize Wheel Winners" sheet through the prize wheel Apps Script
+     (JSON action "leads"; kiosk key required, remembered on this phone like the uploader). Read-only, except the
+     "Handed out" tick (action "handed") so the team can mark a card as collected. CSV export = import file for the CRM. */
+  @font-face { font-family: "Anton"; src: url("assets/fonts/Anton-Regular.ttf") format("truetype"); font-display: swap; }
+  @font-face { font-family: "Oswald"; src: url("assets/fonts/Oswald.ttf") format("truetype"); font-weight: 200 700; font-display: swap; }
+  :root { --red: #b3202a; --red-hi: #e2343e; --ink: #16161a; --muted: #6b6b74; --line: #e3e3e8; --bg: #f4f4f6; --ok: #1f8a4c; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: "Oswald", system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+  header { background: linear-gradient(120deg, var(--red-hi), var(--red) 60%, #6d1016); color: #fff; padding: 16px 16px 26px; }
+  header .row { max-width: 1100px; margin: auto; display: flex; align-items: center; gap: 12px; }
+  header img { height: 42px; width: auto; }
+  header h1 { font-family: "Anton", sans-serif; font-weight: 400; text-transform: uppercase; font-size: 26px; line-height: 1; }
+  header p { opacity: .9; font-size: 14px; margin-top: 3px; }
+  .keychip { margin-left: auto; background: rgba(255,255,255,.18); border: 0; color: #fff; border-radius: 999px; padding: 6px 12px; font: 500 13px "Oswald", sans-serif; cursor: pointer; }
+  main { max-width: 1100px; margin: -14px auto 40px; padding: 0 14px; display: grid; gap: 14px; }
+  .panel { background: #fff; border-radius: 18px; padding: 16px; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+  .panel h2 { font-family: "Anton", sans-serif; font-weight: 400; text-transform: uppercase; letter-spacing: .03em; font-size: 20px; }
+  .hint { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  input { font: 500 16px "Oswald", system-ui, sans-serif; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--line); background: #fafafb; color: var(--ink); }
+  input:focus { outline: none; border-color: var(--red); background: #fff; }
+  .mono { font-family: Consolas, Menlo, monospace !important; letter-spacing: .06em; }
+  .btn { border: 0; border-radius: 12px; padding: 11px 16px; cursor: pointer; font: 400 18px "Anton", sans-serif; letter-spacing: .03em; text-transform: uppercase;
+    background: linear-gradient(120deg, var(--red-hi), var(--red)); color: #fff; box-shadow: 0 6px 16px rgba(179,32,42,.3); }
+  .btn:disabled { opacity: .45; box-shadow: none; }
+  .btn.ghost { background: #ececf0; color: var(--ink); box-shadow: none; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .stat { background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+  .stat b { display: block; font-family: "Anton", sans-serif; font-weight: 400; font-size: 32px; line-height: 1; color: var(--red); }
+  .stat span { font-size: 13px; color: var(--muted); }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .tools input[type=search] { flex: 1; min-width: 180px; }
+  .tools label { font-size: 15px; display: flex; align-items: center; gap: 5px; white-space: nowrap; cursor: pointer; }
+  .tools input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--red); }
+  .wrap { overflow-x: auto; margin-top: 12px; max-height: 70vh; overflow-y: auto; border-radius: 12px; border: 1px solid var(--line); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+  th { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); position: sticky; top: 0; background: #fff; z-index: 1; }
+  td.email { font-weight: 600; }
+  td input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); cursor: pointer; }
+  .tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; background: #ececf0; color: var(--ink); }
+  .tag.gift { background: #fde8e9; color: var(--red); }
+  .tag.ok { background: #e3f4ea; color: var(--ok); }
+  .tag.warn { background: #fff3c4; color: #7a5a00; }
+  .status { margin-top: 10px; font-size: 14px; color: var(--muted); min-height: 1.3em; }
+  .status.ok { color: var(--ok); } .status.err { color: var(--red); font-weight: 600; }
+  .empty { text-align: center; color: var(--muted); padding: 28px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(160%); background: var(--ok); color: #fff; padding: 14px 22px; border-radius: 14px;
+    font-size: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); transition: transform .3s; z-index: 30; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  a { color: var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <img src="assets/img/shield.webp" alt="">
+    <div><h1>Prize Wheel Leads</h1><p>Every email entered on the spin-the-wheel kiosk.</p></div>
+    <button class="keychip" id="keychip" hidden>Key &#10003;</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel" id="key-panel" hidden>
+    <h2>Staff key</h2>
+    <p class="hint">Type the kiosk key once. This phone remembers it.</p>
+    <div style="display:flex;gap:8px;margin-top:8px"><input id="key" class="mono" autocomplete="off" autocapitalize="characters" placeholder="e.g. 4F7A21C9" style="flex:1"><button class="btn" id="key-save">Save</button></div>
+  </section>
+
+  <div class="stats" id="stats" hidden>
+    <div class="stat"><b id="st-total">0</b><span>entries</span></div>
+    <div class="stat"><b id="st-unique">0</b><span>unique emails</span></div>
+    <div class="stat"><b id="st-optin">0</b><span>opted in to updates</span></div>
+    <div class="stat"><b id="st-gift">0</b><span>gift card winners</span></div>
+    <div class="stat"><b id="st-pending">0</b><span>cards not yet handed out</span></div>
+  </div>
+
+  <section class="panel" id="list-panel" hidden>
+    <div class="tools">
+      <input type="search" id="q" placeholder="Search email, prize, kiosk…">
+      <label><input type="checkbox" id="f-optin"> Opted in only</label>
+      <label><input type="checkbox" id="f-gift"> Gift cards only</label>
+      <label><input type="checkbox" id="f-pending"> Not handed out</label>
+    </div>
+    <div class="tools" style="margin-top:10px">
+      <button class="btn" id="csv">Download CSV</button>
+      <button class="btn ghost" id="copy">Copy emails</button>
+      <button class="btn ghost" id="refresh">Refresh</button>
+      <a id="sheet" href="#" target="_blank" rel="noopener" hidden style="font-size:14px">Open the Google Sheet</a>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="wrap">
+      <table>
+        <thead><tr><th>When</th><th>Email</th><th>Prize</th><th>Updates</th><th>Handed out</th><th>Status</th><th>Kiosk</th><th>Code</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>No entries yet.</div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const ENDPOINT = "https://script.google.com/macros/s/AKfycbxIFtva6IDLTqA2IYSAWJYaQz-RvYRuhVq2w3sPz9-hkGot22SonW3y-mH5bS3_QWdF/exec";
+  const $ = id => document.getElementById(id);
+  const ls = { get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+  const key = () => ls.get("tpp-kiosk-key");                            // same key the uploader saved on this phone
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  let rows = [], info = {}, timer = null;
+
+  // ---------- key (one-tap setup link: leads.html#key=XXXXXXXX, like the uploader)
+  { const m = /^#key=([0-9A-Za-z]{6,12})$/.exec(location.hash);
+    if (m) { ls.set("tpp-kiosk-key", m[1].toUpperCase()); history.replaceState(null, "", location.pathname); setTimeout(() => toast("✓ Kiosk key saved on this phone"), 300); } }
+  function showKey() { const has = !!key(); $("key-panel").hidden = has; $("keychip").hidden = !has; }
+  $("key-save").addEventListener("click", () => { ls.set("tpp-kiosk-key", $("key").value.trim().toUpperCase()); showKey(); load(true); });
+  $("key").addEventListener("keydown", e => { if (e.key === "Enter") $("key-save").click(); });
+  $("keychip").addEventListener("click", () => { $("key").value = key(); $("key-panel").hidden = false; });
+  showKey();
+
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
+  function status(msg, cls = "") { const el = $("status"); el.textContent = msg; el.className = "status " + cls; }
+  async function call(body) {
+    // text/plain avoids a CORS preflight; the Apps Script reads the JSON and answers with JSON (same as the uploader)
+    const r = await fetch(ENDPOINT, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
+    return r.json();
+  }
+
+  // ---------- load
+  async function load(manual) {
+    if (!key()) { showKey(); return; }
+    if (manual) status("Refreshing…");
+    try {
+      const j = await call({ action: "leads", key: key() });
+      if (!j.ok) {
+        if (j.error === "wrong kiosk key") { status("That kiosk key isn't right. Fix it above.", "err"); $("key-panel").hidden = false; }
+        else status("Couldn't load: " + j.error, "err");
+        return;
+      }
+      rows = j.rows || []; info = j;
+      $("stats").hidden = false; $("list-panel").hidden = false;
+      if (j.sheet) { $("sheet").href = j.sheet; $("sheet").hidden = false; }
+      render();
+      status("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) +
+        (j.turnedAway ? " · " + j.turnedAway + " turned away (duplicate email or bad entry)" : "") +
+        (j.delivery === "handout" ? " · gift cards are handed out at the booth" : " · gift cards are emailed"), "ok");
+    } catch (e) { status("Couldn't reach the prize wheel script. Check the connection and tap Refresh.", "err"); }
+  }
+  const isGift = r => /gift card/i.test(r.prize);
+  function filtered() {
+    const q = $("q").value.trim().toLowerCase();
+    return rows.filter(r => (!$("f-optin").checked || r.optin) && (!$("f-gift").checked || isGift(r)) && (!$("f-pending").checked || (isGift(r) && !r.handed)) &&
+      (!q || [r.email, r.prize, r.kiosk, r.status, r.id].join(" ").toLowerCase().includes(q)));
+  }
+  const when = t => { const d = new Date(t); return isNaN(d) ? esc(t) : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); };
+  const code = r => r.id.replace(/[^0-9a-z]/gi, "").slice(-6).toUpperCase();
+  function render() {
+    const gifts = rows.filter(isGift);
+    $("st-total").textContent = rows.length;
+    $("st-unique").textContent = new Set(rows.map(r => r.email.toLowerCase())).size;
+    $("st-optin").textContent = rows.filter(r => r.optin).length;
+    $("st-gift").textContent = gifts.length;
+    $("st-pending").textContent = gifts.filter(r => !r.handed).length;
+    const list = filtered();
+    $("empty").hidden = list.length > 0;
+    $("rows").innerHTML = list.map(r => {
+      const st = r.status || "";
+      const tag = /NEEDS REVIEW|FAILED|OUT OF STOCK/i.test(st) ? "warn" : /emailed|Pick up|Booth prize/i.test(st) ? "ok" : "";
+      return "<tr>" +
+        "<td>" + when(r.time) + "</td>" +
+        '<td class="email">' + esc(r.email) + "</td>" +
+        '<td><span class="tag' + (isGift(r) ? " gift" : "") + '">' + esc(r.prize) + "</span></td>" +
+        "<td>" + (r.optin ? '<span class="tag ok">Yes</span>' : '<span class="tag">No</span>') + "</td>" +
+        "<td>" + (isGift(r) ? '<input type="checkbox" data-row="' + r.row + '" data-id="' + esc(r.id) + '"' + (r.handed ? " checked" : "") + ' aria-label="Handed out">' : "") + "</td>" +
+        '<td><span class="tag ' + tag + '">' + esc(st) + "</span></td>" +
+        "<td>" + esc(r.kiosk) + "</td>" +
+        '<td class="mono">' + (isGift(r) ? code(r) : "") + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+  ["q", "f-optin", "f-gift", "f-pending"].forEach(id => $(id).addEventListener("input", render));
+
+  // ---------- handed out (tick on the phone as the card is given over; lands in the sheet's "Gift card sent" box)
+  $("rows").addEventListener("change", async e => {
+    const cb = e.target; if (cb.type !== "checkbox") return;
+    cb.disabled = true;
+    try {
+      const j = await call({ action: "handed", key: key(), id: cb.dataset.id, row: +cb.dataset.row, handed: cb.checked });
+      if (!j.ok) throw new Error(j.error || "failed");
+      const r = rows.find(x => String(x.row) === cb.dataset.row); if (r) r.handed = cb.checked;
+      render(); toast(cb.checked ? "✓ Marked handed out" : "Un-marked");
+    } catch (err) { cb.checked = !cb.checked; toast("Couldn't save: " + err.message); }
+    cb.disabled = false;
+  });
+
+  // ---------- export (CSV = the CRM import file; emails + the fields that matter for a lead)
+  $("csv").addEventListener("click", () => {
+    const list = filtered();
+    const head = ["Email", "Prize", "Marketing opt-in", "Won at", "Kiosk", "Handed out", "Status", "Claim code", "Source"];
+    const body = list.map(r => [r.email, r.prize, r.optin ? "Yes" : "No", r.time, r.kiosk, isGift(r) ? (r.handed ? "Yes" : "No") : "", r.status, isGift(r) ? code(r) : "", "TPP prize wheel, Booth #527"]);
+    const csv = "﻿" + [head].concat(body).map(row => row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = "tpp-prize-wheel-leads-" + new Date().toISOString().slice(0, 10) + ".csv"; a.click();
+    toast("CSV downloaded: " + list.length + " rows");
+  });
+  $("copy").addEventListener("click", async () => {
+    const emails = [...new Set(filtered().map(r => r.email.toLowerCase()))].join("\n");
+    let done = false;
+    try { await navigator.clipboard.writeText(emails); done = true; } catch (e) {}
+    if (!done) { const t = document.createElement("textarea"); t.value = emails; document.body.appendChild(t); t.select(); try { done = document.execCommand("copy"); } catch (e) {} t.remove(); }
+    toast(done ? "✓ Copied " + emails.split("\n").filter(Boolean).length + " emails" : "Couldn't copy on this phone");
+  });
+  $("refresh").addEventListener("click", () => load(true));
+
+  load(true);
+  timer = setInterval(() => { if (document.visibilityState === "visible") load(false); }, 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") load(false); });
+})();
+</script>
+</body>
+</html>
