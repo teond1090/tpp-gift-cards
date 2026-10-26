@@ -38,7 +38,7 @@
 <body>
 <main>
   <h1>Add your gift card to your phone</h1>
-  <div class="sub">Tap Copy, then paste into the wallet's card form. No typing.</div>
+  <div class="sub">The wallet can&#39;t pull the card in by itself. Tap <b>Copy</b> here, then <b>Paste</b> into the wallet&#39;s card form. No typing.</div>
   <div id="app"></div>
 </main>
 <script>
@@ -63,12 +63,14 @@
     '<div class="num">' + esc(pretty) + '</div><div class="foot"><span>COURTESY OF TENANT PROPERTY PROTECTION</span><span>' + (exp ? "VALID THRU " + esc(exp) : "") + '</span></div></div>' +
     row("Card number", pretty, num) + row("Expiry (MM/YY)", exp) + row(codeName, cvv) +
     (isIOS ? '<a class="open" href="shoebox://" id="open-apple">Open Apple Wallet</a>' : '') +
-    (isAndroid || !isIOS ? '<a class="open' + (isIOS ? " alt" : "") + '" href="https://wallet.google.com/" id="open-google">Open Google Wallet</a>' : '') +
+    (isAndroid ? '<a class="open" href="https://wallet.google.com/" id="open-google">Open Google Wallet</a>' : '') +
+    (!isIOS && !isAndroid ? '<div class="steps" style="border:2px solid var(--red)"><b>Open this on your phone</b>Tap-to-pay cards can only be added in the Wallet app on a phone, not on a computer. Open the e-gift card email on your phone and tap the button there.</div>' : '') +
+    (isIOS ? '<div class="note">On an iPhone the card goes into <b>Apple Wallet</b> (the Wallet app). Google Wallet on iPhone can&#39;t hold a tap-to-pay card.</div>' : '') +
     '<div class="note" id="open-note">If the wallet didn&#39;t open: this email app&#39;s built-in browser may block it. Tap the three dots / share icon and choose <b>Open in Safari</b> or <b>Open in Chrome</b>, or just open the Wallet app yourself and come back here to copy.</div>' +
-    '<div class="steps"><b>How it works (about 30 seconds):</b>1. Tap <b>Copy</b> next to the card number. 2. Open the wallet and start adding a card. 3. Paste. 4. Come back for the expiry and ' + codeName + '.<br><br><b>In the wallet:</b> ' +
+    '<div class="steps"><b>How it works (about 30 seconds):</b>1. Tap <b>Copy</b> next to the card number. 2. Open the wallet and start adding a card. 3. Long-press the card number box and <b>Paste</b>. 4. Come back here for the expiry and ' + codeName + '.<br><br><b>In the wallet:</b> ' +
     (isIOS ? 'Tap <b>+</b> &rarr; Debit or Credit Card &rarr; <b>Enter Card Details Manually</b>, paste the number, expiry and ' + codeName + '.'
-           : 'Tap <b>Add to Wallet</b> &rarr; Payment card &rarr; <b>New credit or debit card</b>, paste the number, expiry and ' + codeName + '.') +
-    '</div>' +
+           : 'Tap <b>+ Add to Wallet</b> &rarr; Payment card &rarr; <b>New credit or debit card</b>. Skip the camera scan, choose to enter the details yourself, then paste the number, expiry and ' + codeName + '.') +
+    '<br><br>If the wallet says the card needs verification or can&#39;t be added, register the card first (name + ZIP) at the website on the back, then try again.</div>' +
     '<div class="note">Some prepaid cards must be registered (name + ZIP) at the website on the back of the card before a phone will add them. ' +
     'This page keeps nothing: the details live only in your link. Treat it like cash.</div>';
   app.querySelectorAll(".copy").forEach(b => b.addEventListener("click", async () => {
