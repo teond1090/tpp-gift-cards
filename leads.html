@@ -56,6 +56,9 @@
   .tag.warn { background: #fff3c4; color: #7a5a00; }
   .tag.who { background: #e8eefb; color: #1f3f8f; }
   .btn.on { background: var(--ok); }
+  .btn.ghost.on { background: var(--red); color: #fff; }
+  .x { border: 0; background: #ececf0; color: var(--red); border-radius: 8px; width: 28px; height: 28px; cursor: pointer; font-weight: 700; font-size: 14px; }
+  .x:hover { background: #fde8e9; }
   .status { margin-top: 10px; font-size: 14px; color: var(--muted); min-height: 1.3em; }
   .status.ok { color: var(--ok); } .status.err { color: var(--red); font-weight: 600; }
   .empty { text-align: center; color: var(--muted); padding: 28px; }
@@ -93,6 +96,18 @@
     <div class="stat"><b id="st-pending">0</b><span>cards not yet handed out</span></div>
   </div>
 
+  <section class="panel" id="booth-panel" hidden>
+    <div class="tools">
+      <h2 style="margin:0">Booth cards</h2>
+      <span id="booth-sum" style="font-size:15px;color:var(--muted)"></span>
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center"><span style="font-size:14px;color:var(--muted)">Show day</span>
+        <button class="btn ghost" id="day-1">Day 1</button><button class="btn ghost" id="day-2">Day 2</button></span>
+    </div>
+    <div class="wrap" style="max-height:38vh">
+      <table><thead><tr><th>#</th><th>Day</th><th>Card</th><th>Status</th><th>Won by</th><th>When</th><th>Notes</th></tr></thead><tbody id="booth-rows"></tbody></table>
+    </div>
+  </section>
+
   <section class="panel" id="list-panel" hidden>
     <div class="tools">
       <input type="search" id="q" placeholder="Search email, prize, kiosk…">
@@ -112,7 +127,7 @@
     <div class="status" id="status"></div>
     <div class="wrap">
       <table>
-        <thead><tr><th>When</th><th>Email</th><th>Prize</th><th>Updates</th><th>Who</th><th>Handed out</th><th>Status</th><th>Kiosk</th></tr></thead>
+        <thead><tr><th>When</th><th>Email</th><th>Prize</th><th>Updates</th><th>Who</th><th>Handed out</th><th>Status</th><th>Kiosk</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty" hidden>No entries yet.</div>
@@ -183,7 +198,7 @@
     const q = $("q").value.trim().toLowerCase();
     return rows.filter(r => (!$("f-optin").checked || r.optin) && (!$("f-gift").checked || isGift(r)) && (!$("f-pending").checked || (isGift(r) && !r.handed)) &&
       (!$("f-owner").checked || isOwner(r)) && (!$("f-vendor").checked || isVendor(r)) &&
-      (!q || [r.email, r.prize, r.kiosk, r.status, r.id, r.who || ""].join(" ").toLowerCase().includes(q)));
+      (!q || [r.email, r.prize, r.card || "", r.kiosk, r.status, r.id, r.who || ""].join(" ").toLowerCase().includes(q)));
   }
   const when = t => { const d = new Date(t); return isNaN(d) ? esc(t) : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); };
   function render() {
@@ -203,15 +218,45 @@
       return "<tr>" +
         "<td>" + when(r.time) + "</td>" +
         '<td class="email">' + esc(r.email) + "</td>" +
-        '<td><span class="tag' + (isGift(r) ? " gift" : "") + '">' + esc(r.prize) + "</span></td>" +
+        '<td><span class="tag' + (isGift(r) ? " gift" : "") + '">' + esc(r.card || r.prize) + "</span></td>" +
         "<td>" + (r.optin ? '<span class="tag ok">Yes</span>' : '<span class="tag">No</span>') + "</td>" +
         "<td>" + (r.who ? r.who.split(/,\s*/).map(w => '<span class="tag who">' + esc(w) + "</span>").join(" ") : "") + "</td>" +
         "<td>" + (isGift(r) ? '<input type="checkbox" data-row="' + r.row + '" data-id="' + esc(r.id) + '"' + (r.handed ? " checked" : "") + ' aria-label="Handed out">' : "") + "</td>" +
         '<td><span class="tag ' + tag + '">' + esc(st) + "</span></td>" +
         "<td>" + esc(r.kiosk) + "</td>" +
+        '<td><button class="x" data-del="' + r.row + '" data-id="' + esc(r.id) + '" data-email="' + esc(r.email) + '" title="Delete this entry" aria-label="Delete">&#10005;</button></td>' +
         "</tr>";
     }).join("");
+    renderBooth();
   }
+  // Booth cards (2026-10-27): the physical cards per day; the mystery boxes on the kiosk pick from today's Available ones
+  function renderBooth() {
+    const B = info.booth;
+    $("booth-panel").hidden = !B || !(B.cards || []).length;
+    if (!B) return;
+    const day = +B.day || 1, cards = B.cards || [];
+    const avail = c => /^available$/i.test(c.status);
+    const sum = d => { const c = cards.filter(x => +x.day === d); return c.length ? "Day " + d + ": " + c.filter(avail).length + " of " + c.length + " left" : ""; };
+    $("booth-sum").textContent = [1, 2].map(sum).filter(Boolean).join(" · ") + " · today is day " + day;
+    $("day-1").classList.toggle("on", day === 1); $("day-2").classList.toggle("on", day === 2);
+    $("booth-rows").innerHTML = cards.map(c => "<tr" + (+c.day === day ? "" : ' style="opacity:.5"') + "><td>" + c.n + "</td><td>" + c.day + "</td>" +
+      "<td><b>$" + c.amount + " " + esc(String(c.brand).replace(/ gift card/i, "")) + "</b></td>" +
+      '<td><span class="tag ' + (avail(c) ? "ok" : /handed/i.test(c.status) ? "" : "gift") + '">' + esc(c.status) + "</span></td>" +
+      "<td>" + esc(c.wonBy) + "</td><td>" + (c.wonAt ? when(c.wonAt) : "") + "</td><td>" + esc(c.notes) + "</td></tr>").join("");
+  }
+  ["day-1", "day-2"].forEach((id, i) => $(id).addEventListener("click", async () => {
+    if (!confirm("Switch the kiosk to show day " + (i + 1) + "? The mystery boxes will pick from day " + (i + 1) + "'s cards.")) return;
+    try { const j = await call({ action: "day", key: key(), day: i + 1 }); if (!j.ok) throw new Error(j.error || "failed"); toast("Show day set to " + (i + 1)); load(true); }
+    catch (e) { toast("Couldn't switch the day: " + e.message); }
+  }));
+  $("rows").addEventListener("click", async e => {
+    const b = e.target.closest("[data-del]"); if (!b) return;
+    if (!confirm("Delete the entry for " + b.dataset.email + "? Its booth card (if any) goes back to Available. This can't be undone.")) return;
+    b.disabled = true;
+    try { const j = await call({ action: "delete", key: key(), row: +b.dataset.del, id: b.dataset.id }); if (!j.ok) throw new Error(j.error || "failed");
+      toast("Deleted" + (j.released ? " · " + j.released + " is available again" : "")); load(true); }
+    catch (err) { b.disabled = false; toast("Couldn't delete: " + err.message); }
+  });
   ["q", "f-optin", "f-gift", "f-pending", "f-owner", "f-vendor"].forEach(id => $(id).addEventListener("input", render));
 
   // ---------- handed out (tick on the phone as the card is given over; lands in the sheet's "Gift card sent" box)
@@ -230,8 +275,8 @@
   // ---------- export (CSV = the CRM import file; emails + the fields that matter for a lead)
   $("csv").addEventListener("click", () => {
     const list = filtered();
-    const head = ["Email", "Prize", "Marketing opt-in", "Owner / Vendor", "Won at", "Kiosk", "Handed out", "Status", "Source"];
-    const body = list.map(r => [r.email, r.prize, r.optin ? "Yes" : "No", r.who || "", r.time, r.kiosk, isGift(r) ? (r.handed ? "Yes" : "No") : "", r.status, "TPP prize wheel, Booth #527"]);
+    const head = ["Email", "Prize", "Card", "Marketing opt-in", "Owner / Vendor", "Won at", "Kiosk", "Handed out", "Status", "Source"];
+    const body = list.map(r => [r.email, r.prize, r.card || "", r.optin ? "Yes" : "No", r.who || "", r.time, r.kiosk, isGift(r) ? (r.handed ? "Yes" : "No") : "", r.status, "TPP prize wheel, Booth #527"]);
     const csv = "﻿" + [head].concat(body).map(row => row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\r\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -262,7 +307,7 @@
   }
   function announce(fresh) {
     const f = fresh[0], more = fresh.length > 1 ? " (+" + (fresh.length - 1) + " more)" : "";
-    const line = f.email + " won " + f.prize + more;
+    const line = f.email + " won " + (f.card || f.prize) + more;
     toast("🎉 New winner: " + line);
     if (!alertsOn()) return;
     beep();
