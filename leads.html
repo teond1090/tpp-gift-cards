@@ -34,6 +34,9 @@
   .btn:disabled { opacity: .45; box-shadow: none; }
   .btn.ghost { background: #ececf0; color: var(--ink); box-shadow: none; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  [hidden] { display: none !important; }                                /* 2026-10-27: display:grid was overriding hidden -> zeros showed before any data */
+  .notice { font-size: 15px; color: var(--muted); }
+  .notice.err { color: var(--red); font-weight: 600; }
   .stat { background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
   .stat b { display: block; font-family: "Anton", sans-serif; font-weight: 400; font-size: 32px; line-height: 1; color: var(--red); }
   .stat span { font-size: 13px; color: var(--muted); }
@@ -72,9 +75,11 @@
 <main>
   <section class="panel" id="key-panel" hidden>
     <h2>Staff key</h2>
-    <p class="hint">Type the kiosk key once. This phone remembers it.</p>
+    <p class="hint">Enter the kiosk key (same one as the kiosk's staff panel) to load the leads. This phone remembers it.</p>
     <div style="display:flex;gap:8px;margin-top:8px"><input id="key" class="mono" autocomplete="off" autocapitalize="characters" placeholder="e.g. 4F7A21C9" style="flex:1"><button class="btn" id="key-save">Save</button></div>
   </section>
+
+  <section class="panel" id="notice-panel" hidden><div class="notice" id="notice"></div></section>
 
   <div class="stats" id="stats" hidden>
     <div class="stat"><b id="st-total">0</b><span>entries</span></div>
@@ -129,6 +134,8 @@
 
   function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
   function status(msg, cls = "") { const el = $("status"); el.textContent = msg; el.className = "status " + cls; }
+  // a message that is visible even while the stats + list are hidden (no key yet, wrong key, script unreachable)
+  function notice(msg, cls = "") { $("notice-panel").hidden = !msg; $("notice").textContent = msg || ""; $("notice").className = "notice " + cls; }
   async function call(body) {
     // text/plain avoids a CORS preflight; the Apps Script reads the JSON and answers with JSON (same as the uploader)
     const r = await fetch(ENDPOINT, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
@@ -137,23 +144,28 @@
 
   // ---------- load
   async function load(manual) {
-    if (!key()) { showKey(); return; }
+    if (!key()) { showKey(); notice("Enter the kiosk key above to see the leads."); return; }
     if (manual) status("Refreshing…");
+    if (!rows.length) notice("Loading the leads…");
     try {
       const j = await call({ action: "leads", key: key() });
       if (!j.ok) {
-        if (j.error === "wrong kiosk key") { status("That kiosk key isn't right. Fix it above.", "err"); $("key-panel").hidden = false; }
-        else status("Couldn't load: " + j.error, "err");
+        if (j.error === "wrong kiosk key") { notice("That kiosk key isn't right. Fix it above and tap Save.", "err"); status("", ""); $("key-panel").hidden = false; }
+        else notice("Couldn't load the leads: " + j.error, "err");
         return;
       }
       rows = j.rows || []; info = j;
+      notice("");
       $("stats").hidden = false; $("list-panel").hidden = false;
       if (j.sheet) { $("sheet").href = j.sheet; $("sheet").hidden = false; }
       render();
       status("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) +
         (j.turnedAway ? " · " + j.turnedAway + " turned away (duplicate email or bad entry)" : "") +
         (j.delivery === "handout" ? " · gift cards are handed out at the booth" : " · gift cards are emailed"), "ok");
-    } catch (e) { status("Couldn't reach the prize wheel script. Check the connection and tap Refresh.", "err"); }
+    } catch (e) {
+      const m = "Couldn't reach the prize wheel script. Check the connection and tap Refresh.";
+      if (rows.length) status(m, "err"); else notice(m, "err");
+    }
   }
   const isGift = r => /gift card/i.test(r.prize);
   function filtered() {
